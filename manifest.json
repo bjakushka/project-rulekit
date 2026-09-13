@@ -1,0 +1,55 @@
+{
+  "paths": {
+    "rules": "rules/",
+    "skills": ".claude/skills/",
+    "hooks": ".claude/hooks/"
+  },
+  "core": {
+    "rules": ["CLAUDE.md"],
+    "scaffold": ["PROJECT.tmpl.md"]
+  },
+  "modules": {
+    "type_non-coding": {
+      "group": "type",
+      "required": true,
+      "load": "always",
+      "scaffold": [],
+      "skills": []
+    },
+    "type_coding": {
+      "group": "type",
+      "required": true,
+      "load": "always",
+      "scaffold": [],
+      "skills": []
+    },
+    "vcs": {
+      "group": null,
+      "required": false,
+      "load": "always",
+      "scaffold": [],
+      "skills": []
+    },
+    "secrets": {
+      "group": null,
+      "required": true,
+      "load": "always",
+      "scaffold": [],
+      "skills": []
+    },
+    "inbox": {
+      "group": null,
+      "required": true,
+      "load": "always",
+      "scaffold": ["inbox.tmpl.md"],
+      "skills": []
+    },
+    "backlog": {
+      "group": null,
+      "required": false,
+      "load": "always",
+      "scaffold": ["backlog.tmpl.md"],
+      "skills": []
+    }
+  }
+}
