@@ -1,0 +1,11 @@
+{
+  "name": "rulekit",
+  "description": "Templates and rule modules for LLM instruction files, with tooling to keep them consistent across projects.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Kyrylo Petrov"
+  },
+  "repository": "https://github.com/bjakushka/project-rulekit",
+  "license": "MIT",
+  "keywords": ["claude-md", "instructions", "templates", "scaffolding"]
+}
