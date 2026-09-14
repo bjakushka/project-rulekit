@@ -30,6 +30,11 @@ MODULE_FIELDS = {
     "skills": (list,),
 }
 LOAD_VALUES = {"always", "on-demand"}
+VALUE_FIELDS = {
+    "default": (str, type(None)),
+    "prompt": (str,),
+    "required": (bool,),
+}
 
 def load_manifest():
     with MANIFEST.open() as fh:
@@ -117,7 +122,8 @@ def cmd_list(manifest):
     for key, module in modules.items():
         groups.setdefault(module.get("group"), []).append(key)
 
-    for key, module in modules.items():
+    for key in sorted(modules):
+        module = modules[key]
         desc = heading(TEMPLATE / entry_point(TEMPLATE, key))
 
         flags = []
@@ -138,10 +144,25 @@ def cmd_list(manifest):
     return 0
 
 
+def check_key_order(value, path, problems):
+    """Every object in the manifest has lexicographically sorted keys."""
+    if isinstance(value, dict):
+        keys = list(value)
+        if keys != sorted(keys):
+            problems.append(f"{path}: object keys are not sorted")
+        for key, child in value.items():
+            check_key_order(child, f"{path}.{key}", problems)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            check_key_order(child, f"{path}[{index}]", problems)
+
+
 def check_schema(manifest, problems):
-    for section in ("paths", "core", "modules"):
+    for section in ("core", "modules", "paths", "values"):
         if section not in manifest:
             problems.append(f"manifest: missing top-level section `{section}`")
+
+    check_key_order(manifest, "manifest", problems)
 
     for key, module in manifest.get("modules", {}).items():
         for field, types in MODULE_FIELDS.items():
@@ -154,6 +175,16 @@ def check_schema(manifest, problems):
                 problems.append(f"{key}: unknown field `{field}`")
         if module.get("load") not in LOAD_VALUES:
             problems.append(f"{key}: `load` must be one of {sorted(LOAD_VALUES)}")
+
+    for key, value in manifest.get("values", {}).items():
+        for field, types in VALUE_FIELDS.items():
+            if field not in value:
+                problems.append(f"{key}: missing field `{field}`")
+            elif not isinstance(value[field], types):
+                problems.append(f"{key}: field `{field}` has the wrong type")
+        for field in value:
+            if field not in VALUE_FIELDS:
+                problems.append(f"{key}: unknown field `{field}`")
 
 
 def check_keys(manifest, problems):
