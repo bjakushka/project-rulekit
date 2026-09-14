@@ -3,6 +3,7 @@
 
 Commands:
     list     show every module the kit offers
+    values   show every value the kit can substitute
     check    validate the manifest against the schema and the files
 
 `check` only looks and reports; it never writes. Bringing the manifest back
@@ -141,6 +142,20 @@ def cmd_list(manifest):
         print(f"{key}{suffix}")
         if desc:
             print(f"    {desc}")
+    return 0
+
+
+def cmd_values(manifest):
+    """Print the values available for substitution."""
+    for key in sorted(manifest.get("values", {})):
+        value = manifest["values"][key]
+        required = "required" if value.get("required") else "optional"
+        default = value.get("default")
+        default_flag = "no default" if default is None else f"default={default}"
+
+        print(f"{key}  [{required}, {default_flag}]")
+        if value.get("prompt"):
+            print(f"    {value['prompt']}")
     return 0
 
 
@@ -323,12 +338,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="show every module the kit offers")
+    sub.add_parser("values", help="show every value the kit can substitute")
     sub.add_parser("check", help="validate the manifest")
     args = parser.parse_args()
 
     manifest = load_manifest()
     if args.command == "list":
         return cmd_list(manifest)
+    if args.command == "values":
+        return cmd_values(manifest)
     return cmd_check(manifest)
 
 
