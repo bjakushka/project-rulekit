@@ -42,7 +42,7 @@
     "vcs": {
       "group": null,
       "load": "always",
-      "required": false,
+      "required": true,
       "scaffold": [],
       "skills": []
     }
