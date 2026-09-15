@@ -2,6 +2,7 @@
 """Prepare generated project files for `rulekit:new`.
 
 Commands:
+    apply    move the exact preview into the project root
     prepare  render the validated answers into the target preview
 
 Workspace:
@@ -86,15 +87,16 @@ def kit_commit():
     return run_git("rev-parse", "--verify", "HEAD").strip()
 
 
-def validated_inputs(raw_target):
+def workspace_paths(raw_target, operation):
     target = answers.resolve_target(raw_target)
     preview = target / answers.PREVIEW_DIRECTORY
     path = answers.answers_path(target)
+    destination = preview / FILES_DIRECTORY
 
     if preview.is_symlink() or not preview.is_dir():
         raise CommandError(
             1,
-            f"refused to prepare project preview: {target}",
+            f"refused to {operation} project preview: {target}",
             f"the preview workspace is not a directory: {preview}",
             "initialize a new project workspace and retry",
         )
@@ -113,7 +115,7 @@ def validated_inputs(raw_target):
     if not target_entries.issubset({".git", answers.PREVIEW_DIRECTORY}):
         raise CommandError(
             1,
-            f"refused to prepare project preview: {target}",
+            f"refused to {operation} project preview: {target}",
             "the target contains entries other than `.git` and `.kit-preview`",
             "use a missing, empty, or git-only target directory",
         )
@@ -123,11 +125,17 @@ def validated_inputs(raw_target):
     if unexpected:
         raise CommandError(
             1,
-            f"refused to prepare project preview: {target}",
+            f"refused to {operation} project preview: {target}",
             "the preview workspace contains unexpected entries: "
             f"{', '.join(unexpected)}",
             "inspect the workspace and explicitly remove the unexpected entries",
         )
+
+    return target, preview, path, destination
+
+
+def validated_inputs(raw_target):
+    target, preview, path, _destination = workspace_paths(raw_target, "prepare")
 
     draft = answers.load_answers(path, "prepare project preview")
     modules, values = answers.load_manifest_sections(
@@ -216,16 +224,24 @@ def render_claude(
 
 def snapshot(directory):
     files = {}
-    for path in sorted(directory.rglob("*")):
-        if path.is_symlink() or not (path.is_file() or path.is_dir()):
-            raise CommandError(
-                2,
-                f"failed to compare project preview: {directory}",
-                f"the preview contains a non-regular file: {path}",
-                "inspect and explicitly remove the preview, then retry",
-            )
-        if path.is_file():
-            files[path.relative_to(directory).as_posix()] = path.read_bytes()
+    try:
+        for path in sorted(directory.rglob("*")):
+            if path.is_symlink() or not (path.is_file() or path.is_dir()):
+                raise CommandError(
+                    2,
+                    f"failed to compare project preview: {directory}",
+                    f"the preview contains a non-regular file: {path}",
+                    "inspect and explicitly remove the preview, then retry",
+                )
+            if path.is_file():
+                files[path.relative_to(directory).as_posix()] = path.read_bytes()
+    except OSError as error:
+        raise CommandError(
+            2,
+            f"failed to compare project preview: {directory}",
+            str(error),
+            "check the preview path and permissions, then retry",
+        )
     return files
 
 
@@ -243,6 +259,172 @@ def install_preview(staging, destination):
             return
         shutil.rmtree(destination)
     os.replace(staging, destination)
+
+
+def validate_state(path):
+    state = answers.read_json(
+        path,
+        "preview state",
+        "run prepare again before applying the preview",
+        missing_exit_code=1,
+    )
+    if not isinstance(state, dict) or set(state) != {"kit", "modules", "values"}:
+        raise CommandError(
+            2,
+            f"failed to validate preview state: {path}",
+            "the state must contain exactly `kit`, `modules`, and `values`",
+            "run prepare again before applying the preview",
+        )
+    kit = state["kit"]
+    if not isinstance(kit, dict) or set(kit) != {"commit"}:
+        commit = None
+    else:
+        commit = kit["commit"]
+    if not isinstance(commit, str) or re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        raise CommandError(
+            2,
+            f"failed to validate preview state: {path}",
+            "`kit.commit` must be a full lowercase Git commit hash",
+            "run prepare again before applying the preview",
+        )
+    modules = state["modules"]
+    if (
+        not isinstance(modules, list)
+        or not all(isinstance(name, str) for name in modules)
+        or modules != sorted(set(modules))
+    ):
+        raise CommandError(
+            2,
+            f"failed to validate preview state: {path}",
+            "`modules` must be a sorted list of unique strings",
+            "run prepare again before applying the preview",
+        )
+    if not isinstance(state["values"], dict) or not all(
+        isinstance(key, str) and isinstance(value, str)
+        for key, value in state["values"].items()
+    ):
+        raise CommandError(
+            2,
+            f"failed to validate preview state: {path}",
+            "`values` must be an object with string keys and values",
+            "run prepare again before applying the preview",
+        )
+
+
+def rollback_moves(moved):
+    failures = []
+    for destination, source in reversed(moved):
+        try:
+            os.replace(destination, source)
+        except OSError as error:
+            failures.append(f"{destination}: {error}")
+    return failures
+
+
+def cmd_apply(raw_target):
+    target, preview, path, source_root = workspace_paths(raw_target, "apply")
+
+    if path.is_symlink() or not path.is_file():
+        raise CommandError(
+            1,
+            f"refused to apply project preview: {target}",
+            f"the answers file is not a regular file: {path}",
+            "initialize and prepare a new project workspace",
+        )
+    if source_root.is_symlink() or not source_root.is_dir():
+        raise CommandError(
+            1,
+            f"refused to apply project preview: {target}",
+            f"the prepared files directory is missing or invalid: {source_root}",
+            "run prepare before applying the preview",
+        )
+
+    generated_files = snapshot(source_root)
+    state_source = source_root / STATE_FILENAME
+    validate_state(state_source)
+
+    reserved = sorted(
+        relative
+        for relative in generated_files
+        if {".git", answers.PREVIEW_DIRECTORY}.intersection(
+            Path(relative).parts
+        )
+    )
+    if reserved:
+        raise CommandError(
+            1,
+            f"refused to apply project preview: {target}",
+            f"the preview contains reserved target paths: {', '.join(reserved)}",
+            "fix the generator and run prepare again",
+        )
+
+    try:
+        top_level = sorted(
+            (item for item in source_root.iterdir() if item.name != STATE_FILENAME),
+            key=lambda item: item.name,
+        )
+    except OSError as error:
+        raise CommandError(
+            2,
+            f"failed to inspect project preview: {source_root}",
+            str(error),
+            "check the preview path and permissions, then retry",
+        )
+
+    moves = [(source, target / source.name) for source in top_level]
+    moves.append((state_source, target / STATE_FILENAME))
+    conflicts = sorted(
+        destination.name
+        for _source, destination in moves
+        if os.path.lexists(destination)
+    )
+    if conflicts:
+        raise CommandError(
+            1,
+            f"refused to apply project preview: {target}",
+            f"target paths appeared after validation: {', '.join(conflicts)}",
+            "inspect the target and retry with a missing, empty, or git-only directory",
+        )
+
+    moved = []
+    try:
+        for source, destination in moves:
+            os.replace(source, destination)
+            moved.append((destination, source))
+    except OSError as error:
+        rollback_failures = rollback_moves(moved)
+        if rollback_failures:
+            raise CommandError(
+                2,
+                f"failed to apply and fully roll back project preview: {target}",
+                f"{error}; rollback failures: {'; '.join(rollback_failures)}",
+                "inspect both the project root and preview before continuing",
+            )
+        raise CommandError(
+            2,
+            f"failed to apply project preview: {target}",
+            f"{error}; moved paths were restored to the preview",
+            "check the target path and permissions, then retry",
+        )
+
+    try:
+        source_root.rmdir()
+        path.unlink()
+        preview.rmdir()
+    except OSError as error:
+        raise CommandError(
+            2,
+            f"applied project files but failed to remove preview workspace: {target}",
+            str(error),
+            "verify the generated project, then remove the preview explicitly",
+        )
+
+    report(
+        f"applied project preview: {target}",
+        f"moved {len(generated_files)} generated file(s) and wrote .kit.json last",
+        "continue work in the generated project",
+    )
+    return 0
 
 
 def cmd_prepare(raw_target):
@@ -306,6 +488,7 @@ def main():
     )
     parser.add_argument("--target", required=True, help="future project directory")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("apply", help="move the exact preview into the project root")
     commands.add_parser("prepare", help="render the project preview")
 
     if len(sys.argv) == 1:
@@ -315,6 +498,8 @@ def main():
     args = parser.parse_args()
 
     try:
+        if args.command == "apply":
+            return cmd_apply(args.target)
         if args.command == "prepare":
             return cmd_prepare(args.target)
     except CommandError as error:

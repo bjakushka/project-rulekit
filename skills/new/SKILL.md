@@ -1,6 +1,6 @@
 ---
 name: new
-description: Prepare a new rulekit-managed project by checking a target, interviewing the user, and rendering an exact preview. Use when the user asks to create or initialize a project with rulekit.
+description: Create a new rulekit-managed project by checking a target, interviewing the user, rendering an exact preview, and applying it after approval. Use when the user asks to create or initialize a project with rulekit.
 argument-hint: [target-directory] [instructions...]
 allowed-tools:
   - AskUserQuestion
@@ -25,9 +25,9 @@ Do not call the `advisor` tool when the user instructions, manifest, and script
 output already determine the simple choices. Use it only when a genuinely
 complex decision remains unresolved.
 
-This version collects and validates answers, then renders the project into the
-target's private preview workspace. It creates a missing target and
-`.kit-preview`, but does not copy generated files into the project root.
+Collect and validate answers, then render the project into the target's private
+preview workspace. Apply that exact preview to the project root only after the
+user explicitly approves it.
 
 ## Check the inputs
 
@@ -145,3 +145,20 @@ When preparation succeeds, report the resolved target, answers file path,
 preview path, and the exact selected modules and values. State that the
 generated files are ready for inspection inside `.kit-preview/files` but have
 not been applied to the project root.
+
+Ask one approval question: apply this exact preview, or leave it in place
+without changing the project root. Do not treat an ambiguous response as
+approval. If the user does not approve, stop and preserve `.kit-preview`.
+
+When the user approves, run:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" --target "<target>" apply
+```
+
+Stop and report the script output if application fails. Do not repair, copy, or
+remove files by hand.
+
+When application succeeds, report the resolved target and the exact selected
+modules and values. State that the generated files were applied and the
+temporary `.kit-preview` workspace was removed.
