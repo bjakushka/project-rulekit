@@ -1,11 +1,12 @@
 ---
 name: new
-description: Start a rulekit-managed project by checking a target and interviewing the user for its modules and template values. Use when the user asks to create or initialize a project with rulekit.
+description: Prepare a new rulekit-managed project by checking a target, interviewing the user, and rendering an exact preview. Use when the user asks to create or initialize a project with rulekit.
 argument-hint: [target-directory] [instructions...]
 allowed-tools:
   - AskUserQuestion
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" *)'
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/check-target.py" *)'
 ---
 
@@ -24,9 +25,9 @@ Do not call the `advisor` tool when the user instructions, manifest, and script
 output already determine the simple choices. Use it only when a genuinely
 complex decision remains unresolved.
 
-This version collects and validates answers in the target's private preview
-workspace. It creates a missing target and `.kit-preview`, but does not render
-templates or copy generated files into the project root.
+This version collects and validates answers, then renders the project into the
+target's private preview workspace. It creates a missing target and
+`.kit-preview`, but does not copy generated files into the project root.
 
 ## Check the inputs
 
@@ -129,6 +130,18 @@ If it reports multiple problems, address all of them through the interview and
 the appropriate `answers.py` commands, then run `check` again. Never create or
 edit `answers.json` directly.
 
-When validation succeeds, report the resolved target, the answers file path,
-and the exact selected modules and values. State that no generated project
-files were written and generation is not implemented yet.
+## Prepare the preview
+
+When validation succeeds, run:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" --target "<target>" prepare
+```
+
+Stop if preparation fails. Do not replace, repair, or remove preview files by
+hand.
+
+When preparation succeeds, report the resolved target, answers file path,
+preview path, and the exact selected modules and values. State that the
+generated files are ready for inspection inside `.kit-preview/files` but have
+not been applied to the project root.
