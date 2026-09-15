@@ -4,7 +4,6 @@ description: Start a rulekit-managed project by checking a target and interviewi
 argument-hint: [target-directory] [instructions...]
 allowed-tools:
   - AskUserQuestion
-  - 'Bash(mktemp -d /tmp/rulekit-new.XXXXXX)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/check-target.py" *)'
@@ -25,8 +24,9 @@ Do not call the `advisor` tool when the user instructions, manifest, and script
 output already determine the simple choices. Use it only when a genuinely
 complex decision remains unresolved.
 
-This version only collects and validates temporary answers. It does not create
-the target, render templates, or copy files into the target.
+This version collects and validates answers in the target's private preview
+workspace. It creates a missing target and `.kit-preview`, but does not render
+templates or copy generated files into the project root.
 
 ## Check the inputs
 
@@ -34,7 +34,7 @@ Run these commands in order. Use a separate Bash call for every command. Do not
 combine them with `&&`, `;`, or auxiliary commands.
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/check-target.py" "<target>"
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/check-target.py" --target "<target>"
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" check
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" list
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" values
@@ -42,17 +42,18 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" values
 
 Use the target path reported by `check-target.py` from then on. Stop if either
 check fails. Report the script output; do not bypass a refusal or mutate the
-target to make it pass.
+target by hand to make it pass.
 
-Create a private temporary directory and initialize the answers file:
+Initialize the preview workspace:
 
 ```bash
-mktemp -d /tmp/rulekit-new.XXXXXX
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --file "<temporary-directory>/answers.json" init
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" init
 ```
 
-Use the directory printed by `mktemp` in the next command. Keep it so the user
-can inspect the result.
+Use the resolved target reported by `check-target.py`. `init` creates a missing
+target when needed and writes `.kit-preview/answers.json`. Stop on refusal; an
+existing `.kit-preview` belongs to an earlier attempt and must not be
+overwritten.
 
 ## Confirm inferred answers
 
@@ -95,7 +96,7 @@ value questions.
    module was skipped and the selection did not change:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --file "<answers-file>" modules <selected-module>...
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" modules <selected-module>...
 ```
 
 Let the script sort and validate the names. If the user revises a choice, call
@@ -111,7 +112,7 @@ value for a required field.
 After each answer, store it through the script:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --file "<answers-file>" value <key> <value>
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" value <key> <value>
 ```
 
 Optional values without an answer may remain absent.
@@ -121,7 +122,7 @@ Optional values without an answer may remain absent.
 Run:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --file "<answers-file>" check
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" check
 ```
 
 If it reports multiple problems, address all of them through the interview and
@@ -129,5 +130,5 @@ the appropriate `answers.py` commands, then run `check` again. Never create or
 edit `answers.json` directly.
 
 When validation succeeds, report the resolved target, the answers file path,
-and the exact selected modules and values. State that the target is unchanged
-and generation is not implemented yet.
+and the exact selected modules and values. State that no generated project
+files were written and generation is not implemented yet.

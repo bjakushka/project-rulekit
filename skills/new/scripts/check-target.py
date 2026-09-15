@@ -3,7 +3,8 @@
 
 Output:
     path: <absolute path>
-    state: missing | empty | git-only | not-directory | not-empty | error
+    state: missing | empty | git-only | preview-exists | not-directory |
+           not-empty | error
     ready: yes | no
 
 Exit codes:
@@ -30,6 +31,8 @@ def inspect_target(raw_path):
         return path, "empty", True
     if entries == {".git"}:
         return path, "git-only", True
+    if ".kit-preview" in entries:
+        return path, "preview-exists", False
     return path, "not-empty", False
 
 
@@ -37,13 +40,13 @@ def main():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("path", nargs="?", default=".", help="target path")
+    parser.add_argument("--target", required=True, help="target directory path")
     args = parser.parse_args()
 
     try:
-        path, state, ready = inspect_target(args.path)
+        path, state, ready = inspect_target(args.target)
     except OSError as error:
-        print(f"path: {Path(args.path).expanduser().absolute()}")
+        print(f"path: {Path(args.target).expanduser().absolute()}")
         print("state: error")
         print("ready: no")
         print(f"error: {error}")

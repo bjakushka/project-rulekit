@@ -3,9 +3,12 @@
 
 Commands:
     check   validate that the answers are complete
-    init    create a new empty answers file
+    init    create the target workspace and a new empty answers file
     modules replace the selected module list
     value   set one declared value
+
+Workspace:
+    <target>/.kit-preview/answers.json
 
 Exit codes:
     0  command completed
@@ -22,8 +25,21 @@ from collections import Counter
 from pathlib import Path
 
 
-KIT = Path(__file__).resolve().parents[3]
+def find_kit_root(start):
+    """Find the plugin root by its stable on-disk markers."""
+    for directory in (start, *start.parents):
+        if (
+            (directory / ".claude-plugin" / "plugin.json").is_file()
+            and (directory / "manifest.json").is_file()
+        ):
+            return directory
+    raise RuntimeError(f"could not find the rulekit plugin root above: {start}")
+
+
+KIT = find_kit_root(Path(__file__).resolve().parent)
 MANIFEST = KIT / "manifest.json"
+PREVIEW_DIRECTORY = ".kit-preview"
+ANSWERS_FILENAME = "answers.json"
 
 EMPTY_ANSWERS = {
     "modules": [],
@@ -46,12 +62,20 @@ def report(result, reason, next_step, stream=sys.stdout):
     print(f"next: {next_step}", file=stream)
 
 
-def report_existing(path):
+def resolve_target(raw_target):
+    return Path(raw_target).expanduser().resolve()
+
+
+def answers_path(raw_target):
+    return resolve_target(raw_target) / PREVIEW_DIRECTORY / ANSWERS_FILENAME
+
+
+def report_existing(target, preview):
     raise CommandError(
         1,
-        f"refused to initialize answers file: {path}",
-        "the file already exists and init never overwrites existing answers",
-        "use a different path or explicitly remove the existing file",
+        f"refused to initialize project workspace: {target}",
+        f"the preview workspace already exists: {preview}",
+        "inspect it, then explicitly remove it before starting again",
     )
 
 
@@ -287,31 +311,66 @@ def value_problems(values, selected):
     return problems
 
 
-def cmd_init(raw_path):
-    path = Path(raw_path).expanduser().resolve()
-    parent = path.parent
+def cmd_init(raw_target):
+    target = resolve_target(raw_target)
+    preview = target / PREVIEW_DIRECTORY
+    path = preview / ANSWERS_FILENAME
 
-    if os.path.lexists(path):
-        report_existing(path)
-    if not parent.exists():
+    if os.path.lexists(preview):
+        report_existing(target, preview)
+
+    if os.path.lexists(target) and not target.is_dir():
         raise CommandError(
-            2,
-            f"failed to initialize answers file: {path}",
-            f"parent directory does not exist: {parent}",
-            "create the parent directory or choose another path",
+            1,
+            f"refused to initialize project workspace: {target}",
+            "the target exists and is not a directory",
+            "choose a missing, empty, or git-only target directory",
         )
-    if not parent.is_dir():
+
+    if target.is_dir():
+        try:
+            entries = {entry.name for entry in target.iterdir()}
+        except OSError as error:
+            raise CommandError(
+                2,
+                f"failed to inspect target directory: {target}",
+                str(error),
+                "check the target path and permissions, then retry",
+            )
+        if entries not in (set(), {".git"}):
+            raise CommandError(
+                1,
+                f"refused to initialize project workspace: {target}",
+                "the target contains entries other than `.git`",
+                "choose a missing, empty, or git-only target directory",
+            )
+
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
         raise CommandError(
             2,
-            f"failed to initialize answers file: {path}",
-            f"parent path is not a directory: {parent}",
-            "choose a path inside an existing directory",
+            f"failed to create target directory: {target}",
+            str(error),
+            "check the target path and permissions, then retry",
+        )
+
+    try:
+        preview.mkdir()
+    except FileExistsError:
+        report_existing(target, preview)
+    except OSError as error:
+        raise CommandError(
+            2,
+            f"failed to create preview workspace: {preview}",
+            str(error),
+            "check the target path and permissions, then retry",
         )
 
     temporary_path = None
     try:
         descriptor, temporary_name = tempfile.mkstemp(
-            dir=parent,
+            dir=preview,
             prefix=f".{path.name}.",
             suffix=".tmp",
         )
@@ -331,7 +390,7 @@ def cmd_init(raw_path):
         try:
             os.link(temporary_path, path)
         except FileExistsError:
-            report_existing(path)
+            report_existing(target, preview)
     except OSError as error:
         raise CommandError(
             2,
@@ -363,8 +422,8 @@ def refuse_modules(path, reason, next_step):
     )
 
 
-def cmd_modules(raw_path, selected):
-    path = Path(raw_path).expanduser().resolve()
+def cmd_modules(raw_target, selected):
+    path = answers_path(raw_target)
     answers = load_answers(path, "update modules")
     (modules,) = load_manifest_sections(path, "update modules", "modules")
 
@@ -393,8 +452,8 @@ def refuse_value(path, reason, next_step):
     )
 
 
-def cmd_value(raw_path, key, value):
-    path = Path(raw_path).expanduser().resolve()
+def cmd_value(raw_target, key, value):
+    path = answers_path(raw_target)
     answers = load_answers(path, "update value")
     (values,) = load_manifest_sections(path, "update value", "values")
 
@@ -424,8 +483,8 @@ def cmd_value(raw_path, key, value):
     return 0
 
 
-def cmd_check(raw_path):
-    path = Path(raw_path).expanduser().resolve()
+def cmd_check(raw_target):
+    path = answers_path(raw_target)
     answers = load_answers(path, "check answers")
     modules, values = load_manifest_sections(
         path, "check answers", "modules", "values"
@@ -459,7 +518,9 @@ def main():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--file", required=True, help="temporary answers file")
+    parser.add_argument(
+        "--target", required=True, help="future project directory"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("check", help="validate that the answers are complete")
     commands.add_parser("init", help="create a new empty answers file")
@@ -477,13 +538,13 @@ def main():
 
     try:
         if args.command == "check":
-            return cmd_check(args.file)
+            return cmd_check(args.target)
         if args.command == "init":
-            return cmd_init(args.file)
+            return cmd_init(args.target)
         if args.command == "modules":
-            return cmd_modules(args.file, args.names)
+            return cmd_modules(args.target, args.names)
         if args.command == "value":
-            return cmd_value(args.file, args.key, args.value)
+            return cmd_value(args.target, args.key, args.value)
     except CommandError as error:
         report(error.result, error.reason, error.next_step, stream=sys.stderr)
         return error.exit_code

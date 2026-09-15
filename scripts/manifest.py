@@ -19,7 +19,19 @@ import re
 import sys
 from pathlib import Path
 
-KIT = Path(__file__).resolve().parent.parent
+
+def find_kit_root(start):
+    """Find the plugin root by its stable on-disk markers."""
+    for directory in (start, *start.parents):
+        if (
+            (directory / ".claude-plugin" / "plugin.json").is_file()
+            and (directory / "manifest.json").is_file()
+        ):
+            return directory
+    raise RuntimeError(f"could not find the rulekit plugin root above: {start}")
+
+
+KIT = find_kit_root(Path(__file__).resolve().parent)
 MANIFEST = KIT / "manifest.json"
 TEMPLATE = KIT / "template"
 
