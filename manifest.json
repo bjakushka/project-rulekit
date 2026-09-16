@@ -18,6 +18,13 @@
       "scaffold": ["inbox.tmpl.md"],
       "skills": []
     },
+    "project-context": {
+      "group": null,
+      "load": "always",
+      "required": true,
+      "scaffold": [],
+      "skills": []
+    },
     "secrets": {
       "group": null,
       "load": "always",
@@ -56,6 +63,11 @@
     "CONVERSATION_LANGUAGE": {
       "default": "English",
       "prompt": "Which language should the assistant use for conversation?",
+      "required": true
+    },
+    "VERSION_CONTROL": {
+      "default": "Git",
+      "prompt": "Which version control system should the project use?",
       "required": true
     }
   }

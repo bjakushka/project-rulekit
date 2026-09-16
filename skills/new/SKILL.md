@@ -64,6 +64,10 @@ conversation language may prefill `CONVERSATION_LANGUAGE`. Explicit phrases
 such as "non-coding project" or "without backlog" may answer module choices.
 Silence does not answer an optional choice.
 
+A declared value default is an inferred answer unless the invocation or active
+instructions unambiguously supply a replacement. Include the default in the
+summary and do not ask about it separately when the summary is accepted.
+
 Required standalone modules are automatic, not inferred, and cannot be
 removed. If a user instruction conflicts with them, explain the conflict and
 keep them selected.
