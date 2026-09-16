@@ -7,3 +7,12 @@
 - Do not track status or priority here
 - Do not polish this file too much
 - Remove an entry once it has been dealt with
+
+Entry format:
+
+```markdown
+# Example entry
+
+A rough thought, two or three lines at most. Enough to recognise it later,
+not a worked-out plan.
+```

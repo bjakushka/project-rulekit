@@ -67,7 +67,7 @@ def run_git(*arguments):
     return completed.stdout
 
 
-def kit_commit():
+def kit_version():
     changed = run_git(
         "status",
         "--porcelain",
@@ -75,16 +75,10 @@ def kit_commit():
         "--",
         "manifest.json",
         "template",
-    ).strip()
-    if changed:
-        paths = sorted(line[3:] for line in changed.splitlines())
-        raise CommandError(
-            1,
-            "refused to prepare a project preview",
-            f"managed kit sources differ from HEAD: {', '.join(paths)}",
-            "commit or restore the manifest and templates, then retry",
-        )
-    return run_git("rev-parse", "--verify", "HEAD").strip()
+    ).rstrip("\n")
+    paths = sorted(line[3:] for line in changed.splitlines() if line)
+    commit = run_git("rev-parse", "--verify", "HEAD").strip()
+    return commit, paths
 
 
 def workspace_paths(raw_target, operation):
@@ -171,6 +165,20 @@ def module_entry_point(module):
     if directory.is_dir():
         return Path("rules") / module / "INDEX.md"
     return Path("rules") / f"{module}.md"
+
+
+def scaffold_output_path(name):
+    path = Path(name)
+    suffix = ".tmpl.md"
+    if path.is_absolute() or ".." in path.parts or not path.name.endswith(suffix):
+        raise CommandError(
+            2,
+            "failed to prepare module scaffold",
+            f"invalid scaffold template path: {name}",
+            "run `python3 scripts/manifest.py check` and fix the manifest",
+        )
+    output_name = f"{path.name[:-len(suffix)]}.md"
+    return path.with_name(output_name)
 
 
 def resolved_values(declarations, stored):
@@ -429,7 +437,7 @@ def cmd_apply(raw_target):
 
 def cmd_prepare(raw_target):
     target, preview, draft, modules, values = validated_inputs(raw_target)
-    commit = kit_commit()
+    commit, changed_sources = kit_version()
     staging = Path(tempfile.mkdtemp(dir=preview, prefix=".files."))
     destination = preview / FILES_DIRECTORY
 
@@ -443,14 +451,30 @@ def cmd_prepare(raw_target):
         )
         (staging / "CLAUDE.md").write_text(claude, encoding="utf-8")
 
-        copied = 0
+        copied_rules = 0
         for module in draft["modules"]:
             for source in module_rule_files(module):
                 relative = source.relative_to(answers.KIT / "template")
                 output = staging / relative
                 output.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, output)
-                copied += 1
+                copied_rules += 1
+
+        copied_scaffolds = 0
+        for module in draft["modules"]:
+            for name in modules[module]["scaffold"]:
+                source = answers.KIT / "template" / name
+                output = staging / scaffold_output_path(name)
+                if output.exists():
+                    raise CommandError(
+                        2,
+                        "failed to prepare module scaffold",
+                        f"multiple generated files use the path: {output}",
+                        "fix the manifest so every generated path is unique",
+                    )
+                output.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, output)
+                copied_scaffolds += 1
 
         state = {
             "kit": {"commit": commit},
@@ -474,11 +498,22 @@ def cmd_prepare(raw_target):
         if staging is not None:
             shutil.rmtree(staging, ignore_errors=True)
 
-    report(
-        f"prepared project preview: {destination}",
-        f"rendered CLAUDE.md, {copied} module rule file(s), and .kit.json",
-        "inspect the exact preview before applying it",
+    reason = (
+        f"rendered CLAUDE.md, copied {copied_rules} rule file(s) and "
+        f"{copied_scaffolds} scaffold file(s), and wrote .kit.json"
     )
+    next_step = "inspect the exact preview before applying it"
+    if changed_sources:
+        reason += (
+            "; warning: .kit.json records HEAD although managed kit sources "
+            f"differ from it: {', '.join(changed_sources)}"
+        )
+        next_step = (
+            "inspect the exact preview; commit the kit sources and run prepare "
+            "again before treating kit.commit as a reproducible baseline"
+        )
+
+    report(f"prepared project preview: {destination}", reason, next_step)
     return 0
 
 

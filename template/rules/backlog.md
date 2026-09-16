@@ -8,3 +8,14 @@
 - A task too large to start from a description gets a plan in
   `plans/<task-name>.md`, linked under its description
 - Remove a task when it is done
+
+Task format:
+
+```markdown
+# Example task
+
+Status: ready
+
+What needs doing and why, in a couple of sentences. Concrete enough to start
+from without asking what was meant.
+```
