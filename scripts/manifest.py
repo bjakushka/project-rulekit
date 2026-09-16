@@ -147,6 +147,8 @@ def cmd_list(manifest):
             flags.append(f"group={group}, {'pick one' if mandatory else 'optional'}")
         elif module.get("required"):
             flags.append("required")
+        else:
+            flags.append("optional")
         if module.get("load", "always") != "always":
             flags.append(module["load"])
 
