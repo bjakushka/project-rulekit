@@ -9,6 +9,7 @@ allowed-tools:
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/check-target.py" *)'
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/init-repositories.py" *)'
 ---
 
 # New project
@@ -192,11 +193,12 @@ preview path, exact selected modules and values, concise project context, and
 inner repositories. State that the generated files are ready for inspection
 inside `.kit-preview/files` but have not been applied to the project root.
 
-Use `AskUserQuestion` to ask whether to apply the preview now or inspect it
-first. Put the apply option first and apply only when the user selects it. If
-the user requests inspection, preserve the preview, show it with an available
-review method, then ask the same question again. Do not assume that revdiff or
-any other specific review tool is available. Preserve `.kit-preview` and stop
+Use `AskUserQuestion` to ask whether to apply the preview and, for Git projects,
+initialize the outer and inner repositories now, or inspect the preview first.
+Put the apply option first and apply only when the user selects it. If the user
+requests inspection, preserve the preview, show it with an available review
+method, then ask the same question again. Do not assume that revdiff or any
+other specific review tool is available. Preserve `.kit-preview` and stop
 unless the apply option is selected.
 
 When the user approves, run:
@@ -208,7 +210,20 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" --target "<target>" 
 Stop and report the script output if application fails. Do not repair, copy, or
 remove files by hand.
 
+When `VERSION_CONTROL` is `Git`, pass the resolved target followed by every
+resolved inner repository directory to one script call, in that order:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/init-repositories.py" --repo "<target>" --repo "<target>/<inner-repository>"...
+```
+
+Use exactly the repository paths accepted in the confirmed brief. Stop and
+report the script output if repository initialization fails. Do not create a
+missing directory or repair a repository by hand. For another version control
+value, do not run this Git-specific script.
+
 When application succeeds, report the resolved target and the exact selected
-modules, values, and inner repositories. State that the generated files,
-including the finished `PROJECT.md`, were applied and the temporary
-`.kit-preview` workspace was removed.
+modules, values, and inner repositories. State that the generated files and
+directories, including the finished `PROJECT.md`, were applied, the temporary
+`.kit-preview` workspace was removed, and whether Git repositories were
+initialized or preserved.

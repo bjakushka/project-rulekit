@@ -310,8 +310,24 @@ def render_project(template, draft, modules, rendered_values):
     return text
 
 
+def gitignore_pattern(path):
+    escaped = "".join(
+        f"\\{character}" if character in "!#*?[] " else character
+        for character in path
+    )
+    return f"/{escaped}/"
+
+
+def render_gitignore(repositories):
+    patterns = sorted(
+        gitignore_pattern(repository["path"])
+        for repository in repositories
+    )
+    return "\n".join(patterns) + "\n"
+
+
 def snapshot(directory):
-    files = {}
+    entries = {}
     try:
         for path in sorted(directory.rglob("*")):
             if path.is_symlink() or not (path.is_file() or path.is_dir()):
@@ -321,8 +337,11 @@ def snapshot(directory):
                     f"the preview contains a non-regular file: {path}",
                     "inspect and explicitly remove the preview, then retry",
                 )
+            relative = path.relative_to(directory).as_posix()
             if path.is_file():
-                files[path.relative_to(directory).as_posix()] = path.read_bytes()
+                entries[relative] = path.read_bytes()
+            else:
+                entries[relative] = None
     except OSError as error:
         raise CommandError(
             2,
@@ -330,7 +349,7 @@ def snapshot(directory):
             str(error),
             "check the preview path and permissions, then retry",
         )
-    return files
+    return entries
 
 
 def install_preview(staging, destination):
@@ -427,13 +446,16 @@ def cmd_apply(raw_target):
             "run prepare before applying the preview",
         )
 
-    generated_files = snapshot(source_root)
+    generated_entries = snapshot(source_root)
+    generated_file_count = sum(
+        content is not None for content in generated_entries.values()
+    )
     state_source = source_root / STATE_FILENAME
     validate_state(state_source)
 
     reserved = sorted(
         relative
-        for relative in generated_files
+        for relative in generated_entries
         if {".git", answers.PREVIEW_DIRECTORY}.intersection(
             Path(relative).parts
         )
@@ -509,7 +531,7 @@ def cmd_apply(raw_target):
 
     report(
         f"applied project preview: {target}",
-        f"moved {len(generated_files)} generated file(s) and wrote .kit.json last",
+        f"moved {generated_file_count} generated file(s) and wrote .kit.json last",
         "continue work in the generated project",
     )
     return 0
@@ -537,6 +559,16 @@ def cmd_prepare(raw_target):
             values,
         )
         (staging / "PROJECT.md").write_text(project, encoding="utf-8")
+
+        repositories = draft["brief"]["repositories"]
+        for repository in repositories:
+            (staging / repository["path"]).mkdir(parents=True)
+
+        uses_git = values["VERSION_CONTROL"].casefold() == "git"
+        if uses_git:
+            (staging / ".gitignore").write_text(
+                render_gitignore(repositories), encoding="utf-8"
+            )
 
         copied_rules = 0
         for module in draft["modules"]:
@@ -587,8 +619,11 @@ def cmd_prepare(raw_target):
 
     reason = (
         f"rendered CLAUDE.md and PROJECT.md, copied {copied_rules} rule file(s) "
-        f"and {copied_scaffolds} scaffold file(s), and wrote .kit.json"
+        f"and {copied_scaffolds} scaffold file(s), created "
+        f"{len(repositories)} inner repository directory(s), and wrote .kit.json"
     )
+    if uses_git:
+        reason += " and .gitignore"
     next_step = "inspect the exact preview before applying it"
     if changed_sources:
         reason += (

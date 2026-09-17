@@ -55,6 +55,7 @@ EMPTY_ANSWERS = {
 BRIEF_KEYS = ("context", "repositories")
 RESERVED_TARGET_PATHS = (
     ".git",
+    ".gitignore",
     ".kit-preview",
     ".kit.json",
     "CLAUDE.md",
