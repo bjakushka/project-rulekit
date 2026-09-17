@@ -252,7 +252,8 @@ def repository_layout_block(version_control, repositories):
         "",
         f"Version control: {version_control}.",
         "",
-        "The outer repository holds project instructions, notes, plans, and decisions.",
+        "The outer repository holds project instructions, Rulekit state, and "
+        "workspace-level intake and coordination files.",
         "",
         "Inner repositories:",
         "",

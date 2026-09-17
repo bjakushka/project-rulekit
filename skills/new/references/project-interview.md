@@ -30,11 +30,14 @@ them. In particular, do not unpack a broad category into plausible examples
 the user did not mention.
 
 When the user describes one undivided project and says nothing about repository
-layout, infer one inner repository at `project/` with the purpose `Project
-artifacts`. For explicitly distinct inner repositories, use a short purpose
-such as `REST API` or `Mobile application`. Ask about repository layout only
-when the description implies several independently versioned artifacts or
-leaves a material ambiguity.
+layout, infer one inner repository at `project/`. Derive its concise English
+purpose from the project description: name the subject matter or artifact class
+it owns so that a future assistant can distinguish inner project content from
+outer instructions and coordination files. Do not use a generic purpose such
+as `Project artifacts` or repeat the full context paragraph. For explicitly
+distinct inner repositories, use a short purpose such as `REST API` or `Mobile
+application`. Ask about repository layout only when the description implies
+several independently versioned artifacts or leaves a material ambiguity.
 
 Ask only for facts still missing after inference. Phrase questions in the
 user's terms, not as storage keys or command syntax. Confirm the complete

@@ -24,6 +24,10 @@ or regenerate project files.
 
 Read `${CLAUDE_SKILL_DIR}/references/project-postreview.md`.
 
+Do not call the `advisor` tool when the creation context, generated project,
+and review checklists already determine the review. Use it only when a
+genuinely complex decision remains unresolved.
+
 ## Start an independent reading
 
 Start the read-only `rulekit:fresh-project-reader` agent before doing the main
@@ -51,20 +55,32 @@ While the fresh reader works, inspect the target:
 1. Read `CLAUDE.md`, `PROJECT.md`, and `.kit.json`
 2. Follow the instruction imports from `CLAUDE.md` and read their entry
    points
-3. Inspect the stable top-level project paths needed to verify the repository
-   layout and file map
+3. Verify a stable path named by `PROJECT.md` only when resolving a material
+   question about that path. Do not perform a general filesystem scan
 4. Apply `references/project-postreview.md` using the accepted creation
    context still present in this conversation
+
+Use `Read` and `Grep` for this inspection. Use `Glob` only when it is available
+and a specific unresolved question requires it. Do not use Bash to list or read
+files. Finish reading the imported instructions before forming any finding.
+Do not state a candidate finding, even in a progress update, until both reviews
+are complete and synthesis has retained it.
 
 Review the finished `PROJECT.md` as an instruction artifact for a future LLM
 that will not have the creation conversation. Do not reopen
 `.kit-preview/answers.json`, reconstruct the temporary brief, rerun
-`rulekit:new`, or regenerate the project.
+`rulekit:new`, or regenerate the project. Do not inspect the Rulekit plugin
+source, manifest, or templates to adjudicate a finding: this review is based on
+the generated target and the accepted creation context.
 
 ## Synthesize findings
 
-Collect the fresh-reader report. Treat it as evidence, not authority. Combine
-it with the main review and silently discard:
+After the main review, wait for the fresh-reader completion notification. Emit
+at most one short status line, then end the turn. Do not poll, continue
+inspection, or explain the review method while waiting.
+
+When the report arrives, treat it as evidence, not authority. Combine it with
+the main review and silently discard:
 
 - minor wording or style preferences
 - duplicated findings
@@ -74,9 +90,10 @@ it with the main review and silently discard:
 - details that belong in project content, a README, inbox, or backlog rather
   than stable project orientation
 
-Do not show the discarded list. Present only material omissions,
-contradictions, or ambiguities that could steer future work incorrectly. If
-none remain, say that the post-creation review passed and finish.
+Do not show provisional findings, the discarded list, or the investigation
+used to reject them. Present only material omissions, contradictions, or
+ambiguities that could steer future work incorrectly. If none remain, say that
+the post-creation review passed and finish.
 
 ## Resolve material findings
 
@@ -84,11 +101,23 @@ Ask only the questions needed to resolve the material findings. Use
 `AskUserQuestion` and ask one question per interaction. Do not turn the
 review into a second general interview.
 
+Treat an unambiguous user answer as an accepted stable project fact. Unless it
+conflicts with another explicit instruction, do not reopen the question or
+argue against the resulting correction.
+
 After the answers are clear, draft the smallest exact English change to the
 finished `PROJECT.md`. Show that exact change through an available review
 method and ask for approval. If no diff review method is available, show the
 exact replacement text in the approval question.
 
+Before presenting the change, re-read the complete proposed `PROJECT.md` as it
+would appear after the edit. Confirm that it has no duplicate sections or path
+entries, still follows the imported project-context rules, and changes only the
+facts needed by the accepted answer. Rebuild the proposal if this check fails.
+
 Edit only `PROJECT.md`, only after the user approves the exact proposed
 change. Do not regenerate it or edit rules, scaffolds, `.kit.json`, or project
-content. Re-read the finished file and report the material correction made.
+content. `PROJECT.md` is project-owned after apply: a justified postreview
+edit is expected to differ from the scaffold and must not be rejected merely
+because regeneration would overwrite it. Re-read the finished file and report
+the material correction made.
