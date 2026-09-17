@@ -70,8 +70,10 @@ The reference guides the conversation; it does not define the JSON or CLI.
 
 ## Confirm inferred answers
 
-Before asking individual questions, infer answers that follow unambiguously
-from the invocation or active higher-level instructions. An established
+Before asking individual questions, infer only answers that follow
+unambiguously from the invocation or active higher-level instructions. Do not
+guess from weak or indirect signals. If the user's intent is uncertain, leave
+the answer unresolved and ask. An established
 conversation language may prefill `CONVERSATION_LANGUAGE`. Explicit phrases
 such as "non-coding project" or "without backlog" may answer module choices.
 Silence does not answer an optional choice.
@@ -88,15 +90,23 @@ When at least one answer was inferred, show one summary containing:
 
 - automatic required modules
 - every inferred choice and value
-- the inferred project context and inner repositories
+- every inferred inner repository path and purpose
 - every unresolved choice, value, or material project fact
 
-Ask one confirmation question: use these decisions, or review the inferred
-answers individually. If the user confirms, store the inferred answers through
-`answers.py` and ask only the unresolved questions. If the user requests a
-review, ask both inferred and unresolved questions individually. If the user
-provides corrections in free text, apply the clear corrections and ask only
-about anything still ambiguous or unresolved.
+Show the synthesized English context alone in a clearly separated project-brief
+block. Explain that it will be the main project description available to future
+assistants after this conversation is gone. Use `AskUserQuestion` to ask one
+confirmation question about the inferred decisions and whether the context
+describes the project correctly. Do not put any unresolved question in the
+same interaction.
+
+If the user confirms, store the displayed model-written context and the other
+accepted answers through `answers.py`; do not expand, rewrite, or enrich the
+context afterward. Otherwise the user would review one artifact and receive
+another. If the user requests a review or provides corrections, discuss only
+the disputed inferred parts, then show the revised context before storing it.
+After the inferred answers are accepted, ask each unresolved question
+separately.
 
 ## Choose modules
 
@@ -146,6 +156,9 @@ After each accepted brief answer, call `answers.py brief` with exactly the key
 and argument shape reported by `brief --list`. A repositories update always
 replaces the complete list, so include every accepted repository in one call.
 If the user revises an answer, call the same command again with the replacement.
+Interpret the user's meaning and ask about material ambiguity before drafting
+the context. Then pass the final model-written English draft the user reviewed;
+do not synthesize a different or richer version between review and storage.
 
 Do not expose storage keys as interview questions, invent new keys, write
 repository-layout or file-map Markdown, or create or edit `answers.json`
@@ -179,9 +192,12 @@ preview path, exact selected modules and values, concise project context, and
 inner repositories. State that the generated files are ready for inspection
 inside `.kit-preview/files` but have not been applied to the project root.
 
-Ask one approval question: apply this exact preview, or leave it in place
-without changing the project root. Do not treat an ambiguous response as
-approval. If the user does not approve, stop and preserve `.kit-preview`.
+Use `AskUserQuestion` to ask whether to apply the preview now or inspect it
+first. Put the apply option first and apply only when the user selects it. If
+the user requests inspection, preserve the preview, show it with an available
+review method, then ask the same question again. Do not assume that revdiff or
+any other specific review tool is available. Preserve `.kit-preview` and stop
+unless the apply option is selected.
 
 When the user approves, run:
 

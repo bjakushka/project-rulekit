@@ -554,7 +554,7 @@ def cmd_brief_list():
         "    usage: brief repositories --repo <relative-path> <purpose> "
         "[--repo ...]"
     )
-    print("    One or more inner repositories, each with its purpose.")
+    print("    One or more inner repositories, each with a concise purpose.")
     return 0
 
 

@@ -4,10 +4,11 @@
   assistant needs to orient itself
 - Keep its file map aligned whenever work changes stable project paths or
   entry points
-- List stable top-level paths and primary entry points, each with a short
-  description of its purpose
-- Describe a collection such as `rules/` as one entry instead of enumerating
-  its contents, unless a file inside it is itself a primary entry point
-- Omit generated, temporary, and low-level implementation details
+- Keep core Rulekit state and instruction files grouped as generated; do not
+  enumerate individual rule or scaffold files
+- List each inner repository once, with a short description of its purpose
+- Add other stable primary entry points only when they materially help
+  orientation
+- Omit temporary and low-level implementation details
 - Do not turn `PROJECT.md` into a README, backlog, or status log
 - Keep behavior rules in rule modules, not in `PROJECT.md`

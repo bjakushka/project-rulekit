@@ -258,52 +258,17 @@ def repository_layout_block(version_control, repositories):
         "",
     ]
     lines.extend(
-        markdown_bullet(f"{repository['path']}/", repository["purpose"])
+        f"- `{repository['path']}/`"
         for repository in repositories
     )
     return "\n".join(lines)
 
 
-def module_description(module):
-    path = answers.KIT / "template" / module_entry_point(module)
-    text = re.sub(r"<!--.*?-->", "", path.read_text(encoding="utf-8"), flags=re.S)
-    for line in text.splitlines():
-        match = re.match(r"##\s+(.+)", line.strip())
-        if match:
-            return match.group(1).strip()
-    raise CommandError(
-        2,
-        "failed to render PROJECT.md",
-        f"module entry point has no level-two heading: {path}",
-        "run `python3 scripts/manifest.py check` and fix the module rules",
+def file_map_block(draft):
+    return "\n".join(
+        markdown_bullet(f"{repository['path']}/", repository["purpose"])
+        for repository in draft["brief"]["repositories"]
     )
-
-
-def file_map_block(draft, modules):
-    entries = {
-        ".kit.json": "Rulekit state used for later synchronization",
-        "CLAUDE.md": "Core assistant instructions and rule imports",
-        "PROJECT.md": "Stable project facts, repository layout, and this file map",
-        "rules/": (
-            "Selected project rules: "
-            + "; ".join(module_description(name) for name in draft["modules"])
-        ),
-    }
-
-    for module in draft["modules"]:
-        description = module_description(module)
-        for scaffold in modules[module]["scaffold"]:
-            path = scaffold_output_path(scaffold).as_posix()
-            entries[path] = description
-
-    for repository in draft["brief"]["repositories"]:
-        entries[f"{repository['path']}/"] = repository["purpose"]
-
-    bullets = [
-        markdown_bullet(path, entries[path])
-        for path in sorted(entries, key=str.casefold)
-    ]
-    return "\n".join(["## File map", "", *bullets])
 
 
 def render_project(template, draft, modules, rendered_values):
@@ -316,7 +281,7 @@ def render_project(template, draft, modules, rendered_values):
             "restore or fix the manifest value declaration, then retry",
         )
     blocks = {
-        "FILE_MAP": file_map_block(draft, modules),
+        "FILE_MAP": file_map_block(draft),
         "PROJECT_CONTEXT": project_context_block(draft["brief"]["context"]),
         "REPOSITORY_LAYOUT": repository_layout_block(
             rendered_values["VERSION_CONTROL"], draft["brief"]["repositories"]
