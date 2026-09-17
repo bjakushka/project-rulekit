@@ -4,6 +4,7 @@ description: Create a new rulekit-managed project by checking a target, intervie
 argument-hint: [target-directory] [instructions...]
 allowed-tools:
   - AskUserQuestion
+  - Read
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" *)'
@@ -12,10 +13,11 @@ allowed-tools:
 
 # New project
 
-Treat the first argument as the target directory path. If it is absent, use the
-current working directory. Treat the remaining arguments as user instructions
-for the interview. A target path that contains spaces must be quoted; use `.`
-when passing instructions for the current directory.
+Treat the first argument as the target only when it clearly uses path syntax:
+it starts with `.`, `/`, or `~`, or contains a path separator. Otherwise use
+the current working directory and treat every argument as interview prose. Use
+`./name` for a relative target. A target path that contains spaces must be
+quoted.
 
 Follow the conversation language established by higher-level instructions from
 the first response. Do not switch languages because this skill is written in
@@ -56,6 +58,16 @@ target when needed and writes `.kit-preview/answers.json`. Stop on refusal; an
 existing `.kit-preview` belongs to an earlier attempt and must not be
 overwritten.
 
+Read `${CLAUDE_SKILL_DIR}/references/project-interview.md`, then ask the script
+for the temporary brief contract:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" brief --list
+```
+
+Treat the reported keys and argument shapes as the sole brief storage contract.
+The reference guides the conversation; it does not define the JSON or CLI.
+
 ## Confirm inferred answers
 
 Before asking individual questions, infer answers that follow unambiguously
@@ -76,7 +88,8 @@ When at least one answer was inferred, show one summary containing:
 
 - automatic required modules
 - every inferred choice and value
-- every unresolved choice and value
+- the inferred project context and inner repositories
+- every unresolved choice, value, or material project fact
 
 Ask one confirmation question: use these decisions, or review the inferred
 answers individually. If the user confirms, store the inferred answers through
@@ -122,6 +135,22 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>
 
 Optional values without an answer may remain absent.
 
+## Collect the project brief
+
+Follow `references/project-interview.md`. Use the invocation and earlier
+conversation before asking follow-up questions. The context is an English
+orientation artifact for a future assistant, regardless of the conversation
+language.
+
+After each accepted brief answer, call `answers.py brief` with exactly the key
+and argument shape reported by `brief --list`. A repositories update always
+replaces the complete list, so include every accepted repository in one call.
+If the user revises an answer, call the same command again with the replacement.
+
+Do not expose storage keys as interview questions, invent new keys, write
+repository-layout or file-map Markdown, or create or edit `answers.json`
+directly.
+
 ## Validate the answers
 
 Run:
@@ -146,9 +175,9 @@ Stop if preparation fails. Do not replace, repair, or remove preview files by
 hand.
 
 When preparation succeeds, report the resolved target, answers file path,
-preview path, and the exact selected modules and values. State that the
-generated files are ready for inspection inside `.kit-preview/files` but have
-not been applied to the project root.
+preview path, exact selected modules and values, concise project context, and
+inner repositories. State that the generated files are ready for inspection
+inside `.kit-preview/files` but have not been applied to the project root.
 
 Ask one approval question: apply this exact preview, or leave it in place
 without changing the project root. Do not treat an ambiguous response as
@@ -164,5 +193,6 @@ Stop and report the script output if application fails. Do not repair, copy, or
 remove files by hand.
 
 When application succeeds, report the resolved target and the exact selected
-modules and values. State that the generated files were applied and the
-temporary `.kit-preview` workspace was removed.
+modules, values, and inner repositories. State that the generated files,
+including the finished `PROJECT.md`, were applied and the temporary
+`.kit-preview` workspace was removed.
