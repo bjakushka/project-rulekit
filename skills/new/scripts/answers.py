@@ -2,6 +2,7 @@
 """Build and validate temporary interview answers for `rulekit:new`.
 
 Commands:
+    brief   show or replace one project brief answer
     check   validate that the answers are complete
     init    create the target workspace and a new empty answers file
     modules replace the selected module list
@@ -19,6 +20,7 @@ Exit codes:
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from collections import Counter
@@ -42,9 +44,23 @@ PREVIEW_DIRECTORY = ".kit-preview"
 ANSWERS_FILENAME = "answers.json"
 
 EMPTY_ANSWERS = {
+    "brief": {
+        "context": None,
+        "repositories": [],
+    },
     "modules": [],
     "values": {},
 }
+
+BRIEF_KEYS = ("context", "repositories")
+RESERVED_TARGET_PATHS = (
+    ".git",
+    ".kit-preview",
+    ".kit.json",
+    "CLAUDE.md",
+    "PROJECT.md",
+    "rules",
+)
 
 
 class CommandError(Exception):
@@ -134,8 +150,30 @@ def write_replacement(path, data):
 def validate_answers(answers):
     if not isinstance(answers, dict):
         return "the answers document must be a JSON object"
-    if set(answers) != {"modules", "values"}:
-        return "the answers document must contain exactly `modules` and `values`"
+    if set(answers) != {"brief", "modules", "values"}:
+        return (
+            "the answers document must contain exactly `brief`, `modules`, "
+            "and `values`"
+        )
+    if not isinstance(answers["brief"], dict):
+        return "`brief` must be a JSON object"
+    if set(answers["brief"]) != set(BRIEF_KEYS):
+        return "`brief` must contain exactly `context` and `repositories`"
+    if answers["brief"]["context"] is not None and not isinstance(
+        answers["brief"]["context"], str
+    ):
+        return "`brief.context` must be a string or null"
+    repositories = answers["brief"]["repositories"]
+    if not isinstance(repositories, list):
+        return "`brief.repositories` must be a JSON array"
+    for repository in repositories:
+        if not isinstance(repository, dict) or set(repository) != {"path", "purpose"}:
+            return (
+                "every `brief.repositories` entry must contain exactly `path` "
+                "and `purpose`"
+            )
+        if not all(isinstance(repository[key], str) for key in ("path", "purpose")):
+            return "repository paths and purposes must be strings"
     if not isinstance(answers["modules"], list):
         return "`modules` must be a JSON array"
     if not isinstance(answers["values"], dict):
@@ -311,6 +349,100 @@ def value_problems(values, selected):
     return problems
 
 
+def scaffold_output_path(name):
+    path = Path(name)
+    suffix = ".tmpl.md"
+    if path.is_absolute() or ".." in path.parts or not path.name.endswith(suffix):
+        raise CommandError(
+            2,
+            "failed to validate project brief",
+            f"invalid scaffold template path in the manifest: {name}",
+            "run `python3 scripts/manifest.py check` and fix the manifest",
+        )
+    return path.with_name(f"{path.name[:-len(suffix)]}.md")
+
+
+def normalize_repository_path(raw_path):
+    path = raw_path.strip().rstrip("/")
+    if not path:
+        return None, "repository path is empty"
+    if path.startswith("/") or "\\" in path:
+        return None, f"repository path must be relative and use `/`: {raw_path}"
+    if any(ord(character) < 32 for character in path):
+        return None, f"repository path contains a control character: {raw_path}"
+
+    parts = path.split("/")
+    if any(part in ("", ".", "..", "~") for part in parts):
+        return None, f"repository path is not normalized or safe: {raw_path}"
+    if re.match(r"^[A-Za-z]:", parts[0]):
+        return None, f"repository path must not use a drive prefix: {raw_path}"
+    return "/".join(parts), None
+
+
+def path_parts(path):
+    return tuple(part.casefold() for part in path.split("/"))
+
+
+def paths_overlap(left, right):
+    left_parts = path_parts(left)
+    right_parts = path_parts(right)
+    common = min(len(left_parts), len(right_parts))
+    return left_parts[:common] == right_parts[:common]
+
+
+def generated_target_paths(modules, selected_modules):
+    generated = set(RESERVED_TARGET_PATHS)
+    for name in selected_modules:
+        module = modules.get(name)
+        if module is None:
+            continue
+        for scaffold in module.get("scaffold", []):
+            generated.add(scaffold_output_path(scaffold).as_posix())
+    return sorted(generated)
+
+
+def brief_problems(brief, modules, selected_modules, require_complete=False):
+    problems = []
+    context = brief["context"]
+    if require_complete and (context is None or not context.strip()):
+        problems.append("project brief context is missing or empty")
+    elif isinstance(context, str) and not context.strip():
+        problems.append("project brief context is empty")
+
+    repositories = brief["repositories"]
+    if require_complete and not repositories:
+        problems.append("project brief has no inner repositories")
+
+    normalized = []
+    for repository in repositories:
+        path, problem = normalize_repository_path(repository["path"])
+        if problem:
+            problems.append(problem)
+            continue
+        if path != repository["path"]:
+            problems.append(f"repository path is not normalized: {repository['path']}")
+        if not repository["purpose"].strip():
+            problems.append(f"repository purpose is empty: {repository['path']}")
+        normalized.append(path)
+
+    for index, path in enumerate(normalized):
+        for other in normalized[index + 1:]:
+            if paths_overlap(path, other):
+                problems.append(f"repository paths overlap: {path}, {other}")
+
+    reserved = generated_target_paths(modules, selected_modules)
+    for path in normalized:
+        conflicts = [
+            candidate for candidate in reserved if paths_overlap(path, candidate)
+        ]
+        if conflicts:
+            problems.append(
+                f"repository path `{path}` conflicts with generated or reserved "
+                f"path: {conflicts[0]}"
+            )
+    return problems
+
+
 def cmd_init(raw_target):
     target = resolve_target(raw_target)
     preview = target / PREVIEW_DIRECTORY
@@ -407,8 +539,103 @@ def cmd_init(raw_target):
 
     report(
         f"initialized answers file: {path}",
-        "init created a new document with empty modules and values",
-        "collect module and value answers",
+        "init created a new document with an empty brief, modules, and values",
+        "collect project brief, module, and value answers",
+    )
+    return 0
+
+
+def cmd_brief_list():
+    print("context")
+    print("    usage: brief context <text...>")
+    print("    Concise English orientation for a future assistant.")
+    print("repositories")
+    print(
+        "    usage: brief repositories --repo <relative-path> <purpose> "
+        "[--repo ...]"
+    )
+    print("    One or more inner repositories, each with its purpose.")
+    return 0
+
+
+def refuse_brief(path, reason, next_step):
+    raise CommandError(
+        1,
+        f"refused to update project brief in answers file: {path}",
+        reason,
+        next_step,
+    )
+
+
+def cmd_brief(raw_target, key, values, repositories):
+    path = answers_path(raw_target)
+    answers = load_answers(path, "update project brief")
+    (modules,) = load_manifest_sections(path, "update project brief", "modules")
+
+    if key not in BRIEF_KEYS:
+        return refuse_brief(
+            path,
+            f"unknown project brief key: {key}",
+            f"choose from: {', '.join(BRIEF_KEYS)}",
+        )
+
+    if key == "context":
+        if repositories:
+            return refuse_brief(
+                path,
+                "`context` does not accept `--repo` arguments",
+                "pass the concise English context as positional text",
+            )
+        context = " ".join(values).strip()
+        if not context:
+            return refuse_brief(
+                path,
+                "project brief context is empty",
+                "provide concise English orientation text",
+            )
+        answers["brief"]["context"] = context
+    else:
+        if values:
+            return refuse_brief(
+                path,
+                "`repositories` accepts only repeated `--repo` arguments",
+                "use `--repo <relative-path> <purpose>` for every repository",
+            )
+        if not repositories:
+            return refuse_brief(
+                path,
+                "project brief has no inner repositories",
+                "provide at least one `--repo <relative-path> <purpose>` argument",
+            )
+
+        updated = []
+        for raw_path, raw_purpose in repositories:
+            repository_path, problem = normalize_repository_path(raw_path)
+            if problem:
+                return refuse_brief(path, problem, "provide a safe relative path")
+            purpose = raw_purpose.strip()
+            if not purpose:
+                return refuse_brief(
+                    path,
+                    f"repository purpose is empty: {raw_path}",
+                    "provide a non-empty purpose for every repository",
+                )
+            updated.append({"path": repository_path, "purpose": purpose})
+        answers["brief"]["repositories"] = sorted(
+            updated, key=lambda repository: repository["path"].casefold()
+        )
+
+    problems = brief_problems(
+        answers["brief"], modules, answers["modules"], require_complete=False
+    )
+    if problems:
+        return refuse_brief(path, problems[0], "correct the project brief and retry")
+
+    save_answers(path, answers, "update project brief")
+    report(
+        f"updated project brief `{key}` in answers file: {path}",
+        "the answer satisfies the project brief contract",
+        "set remaining answers or check the answers",
     )
     return 0
 
@@ -497,6 +724,14 @@ def cmd_check(raw_target):
         )
     ]
     problems.extend(value_problems(values, answers["values"]))
+    problems.extend(
+        brief_problems(
+            answers["brief"],
+            modules,
+            answers["modules"],
+            require_complete=True,
+        )
+    )
 
     if problems:
         print(f"result: answers file is incomplete: {path}", file=sys.stderr)
@@ -508,7 +743,7 @@ def cmd_check(raw_target):
 
     report(
         f"answers file is complete: {path}",
-        "modules and values satisfy the current kit manifest",
+        "the project brief, modules, and values satisfy the current kit contract",
         "prepare the generated project",
     )
     return 0
@@ -522,6 +757,18 @@ def main():
         "--target", required=True, help="future project directory"
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    brief = commands.add_parser("brief", help="show or replace a project brief answer")
+    brief.add_argument("--list", action="store_true", help="show the brief contract")
+    brief.add_argument("key", nargs="?", help="brief answer key")
+    brief.add_argument("values", nargs="*", help="brief answer text")
+    brief.add_argument(
+        "--repo",
+        action="append",
+        default=[],
+        nargs=2,
+        metavar=("PATH", "PURPOSE"),
+        help="inner repository path and purpose",
+    )
     commands.add_parser("check", help="validate that the answers are complete")
     commands.add_parser("init", help="create a new empty answers file")
     modules = commands.add_parser("modules", help="replace the selected modules")
@@ -537,6 +784,14 @@ def main():
     args = parser.parse_args()
 
     try:
+        if args.command == "brief":
+            if args.list:
+                if args.key is not None or args.values or args.repo:
+                    parser.error("brief --list does not accept a key or values")
+                return cmd_brief_list()
+            if args.key is None:
+                parser.error("brief requires a key or --list")
+            return cmd_brief(args.target, args.key, args.values, args.repo)
         if args.command == "check":
             return cmd_check(args.target)
         if args.command == "init":

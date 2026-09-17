@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -142,6 +143,11 @@ def validated_inputs(raw_target):
         )
     ]
     problems.extend(answers.value_problems(values, draft["values"]))
+    problems.extend(
+        answers.brief_problems(
+            draft["brief"], modules, draft["modules"], require_complete=True
+        )
+    )
     if problems:
         raise CommandError(
             1,
@@ -168,17 +174,7 @@ def module_entry_point(module):
 
 
 def scaffold_output_path(name):
-    path = Path(name)
-    suffix = ".tmpl.md"
-    if path.is_absolute() or ".." in path.parts or not path.name.endswith(suffix):
-        raise CommandError(
-            2,
-            "failed to prepare module scaffold",
-            f"invalid scaffold template path: {name}",
-            "run `python3 scripts/manifest.py check` and fix the manifest",
-        )
-    output_name = f"{path.name[:-len(suffix)]}.md"
-    return path.with_name(output_name)
+    return answers.scaffold_output_path(name)
 
 
 def resolved_values(declarations, stored):
@@ -228,6 +224,125 @@ def render_claude(
             "restore or fix template/CLAUDE.md, then retry",
         )
     return text, rendered_values
+
+
+def markdown_bullet(path, description):
+    return textwrap.fill(
+        f"- `{path}` - {description}",
+        width=80,
+        subsequent_indent="  ",
+    )
+
+
+def wrapped_prose(text):
+    paragraphs = re.split(r"\n\s*\n", text.strip())
+    return "\n\n".join(
+        textwrap.fill(" ".join(paragraph.split()), width=80)
+        for paragraph in paragraphs
+    )
+
+
+def project_context_block(context):
+    return f"# Project context\n\n{wrapped_prose(context)}"
+
+
+def repository_layout_block(version_control, repositories):
+    lines = [
+        "## Repository layout",
+        "",
+        f"Version control: {version_control}.",
+        "",
+        "The outer repository holds project instructions, notes, plans, and decisions.",
+        "",
+        "Inner repositories:",
+        "",
+    ]
+    lines.extend(
+        markdown_bullet(f"{repository['path']}/", repository["purpose"])
+        for repository in repositories
+    )
+    return "\n".join(lines)
+
+
+def module_description(module):
+    path = answers.KIT / "template" / module_entry_point(module)
+    text = re.sub(r"<!--.*?-->", "", path.read_text(encoding="utf-8"), flags=re.S)
+    for line in text.splitlines():
+        match = re.match(r"##\s+(.+)", line.strip())
+        if match:
+            return match.group(1).strip()
+    raise CommandError(
+        2,
+        "failed to render PROJECT.md",
+        f"module entry point has no level-two heading: {path}",
+        "run `python3 scripts/manifest.py check` and fix the module rules",
+    )
+
+
+def file_map_block(draft, modules):
+    entries = {
+        ".kit.json": "Rulekit state used for later synchronization",
+        "CLAUDE.md": "Core assistant instructions and rule imports",
+        "PROJECT.md": "Stable project facts, repository layout, and this file map",
+        "rules/": (
+            "Selected project rules: "
+            + "; ".join(module_description(name) for name in draft["modules"])
+        ),
+    }
+
+    for module in draft["modules"]:
+        description = module_description(module)
+        for scaffold in modules[module]["scaffold"]:
+            path = scaffold_output_path(scaffold).as_posix()
+            entries[path] = description
+
+    for repository in draft["brief"]["repositories"]:
+        entries[f"{repository['path']}/"] = repository["purpose"]
+
+    bullets = [
+        markdown_bullet(path, entries[path])
+        for path in sorted(entries, key=str.casefold)
+    ]
+    return "\n".join(["## File map", "", *bullets])
+
+
+def render_project(template, draft, modules, rendered_values):
+    text = template.read_text(encoding="utf-8")
+    if "VERSION_CONTROL" not in rendered_values:
+        raise CommandError(
+            2,
+            "failed to render PROJECT.md",
+            "the manifest must declare a resolved `VERSION_CONTROL` value",
+            "restore or fix the manifest value declaration, then retry",
+        )
+    blocks = {
+        "FILE_MAP": file_map_block(draft, modules),
+        "PROJECT_CONTEXT": project_context_block(draft["brief"]["context"]),
+        "REPOSITORY_LAYOUT": repository_layout_block(
+            rendered_values["VERSION_CONTROL"], draft["brief"]["repositories"]
+        ),
+    }
+
+    for key, block in blocks.items():
+        marker = f"{{{{{key}}}}}"
+        if text.count(marker) != 1:
+            raise CommandError(
+                2,
+                "failed to render PROJECT.md",
+                f"the template must contain exactly one `{marker}` marker",
+                "restore or fix template/PROJECT.tmpl.md, then retry",
+            )
+        text = text.replace(marker, block)
+
+    remaining = sorted(set(PLACEHOLDER.findall(text)))
+    if remaining:
+        raise CommandError(
+            2,
+            "failed to render PROJECT.md",
+            f"template markers have no renderer: {', '.join(remaining)}",
+            "declare a renderer for every PROJECT.md template marker",
+        )
+    return text
 
 
 def snapshot(directory):
@@ -450,6 +565,13 @@ def cmd_prepare(raw_target):
             values,
         )
         (staging / "CLAUDE.md").write_text(claude, encoding="utf-8")
+        project = render_project(
+            answers.KIT / "template" / "PROJECT.tmpl.md",
+            draft,
+            modules,
+            values,
+        )
+        (staging / "PROJECT.md").write_text(project, encoding="utf-8")
 
         copied_rules = 0
         for module in draft["modules"]:
@@ -499,8 +621,8 @@ def cmd_prepare(raw_target):
             shutil.rmtree(staging, ignore_errors=True)
 
     reason = (
-        f"rendered CLAUDE.md, copied {copied_rules} rule file(s) and "
-        f"{copied_scaffolds} scaffold file(s), and wrote .kit.json"
+        f"rendered CLAUDE.md and PROJECT.md, copied {copied_rules} rule file(s) "
+        f"and {copied_scaffolds} scaffold file(s), and wrote .kit.json"
     )
     next_step = "inspect the exact preview before applying it"
     if changed_sources:
