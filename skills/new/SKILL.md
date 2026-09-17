@@ -5,6 +5,7 @@ argument-hint: [target-directory] [instructions...]
 allowed-tools:
   - AskUserQuestion
   - Read
+  - 'Skill(rulekit:postreview *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" *)'
@@ -227,3 +228,7 @@ modules, values, and inner repositories. State that the generated files and
 directories, including the finished `PROJECT.md`, were applied, the temporary
 `.kit-preview` workspace was removed, and whether Git repositories were
 initialized or preserved.
+
+Then invoke `rulekit:postreview` through the Skill tool with the resolved
+target as its only argument. This is the final stage of project creation; do
+not ask the user whether to start it.
