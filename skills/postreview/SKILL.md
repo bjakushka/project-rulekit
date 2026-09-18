@@ -97,6 +97,10 @@ the post-creation review passed and finish.
 
 ## Resolve material findings
 
+First distinguish a missing stable project fact from a defect in an imported
+behavior rule. If the finding requires changing a rule, report it as an
+upstream Rulekit issue and do not mask it with instructions in `PROJECT.md`.
+
 Ask only the questions needed to resolve the material findings. Use
 `AskUserQuestion` and ask one question per interaction. Do not turn the
 review into a second general interview.

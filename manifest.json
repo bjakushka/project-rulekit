@@ -61,11 +61,13 @@
   },
   "values": {
     "CONVERSATION_LANGUAGE": {
+      "choices": null,
       "default": "English",
       "prompt": "Which language should the assistant use for conversation?",
       "required": true
     },
     "VERSION_CONTROL": {
+      "choices": ["Git"],
       "default": "Git",
       "prompt": "Which version control system should the project use?",
       "required": true

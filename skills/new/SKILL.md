@@ -83,6 +83,10 @@ Silence does not answer an optional choice.
 A declared value default is an inferred answer unless the invocation or active
 instructions unambiguously supply a replacement. Include the default in the
 summary and do not ask about it separately when the summary is accepted.
+When `manifest.py values` reports choices, accept only those values. If the
+user requests an unsupported value, explain the current limitation and ask
+whether to use a supported value or stop; do not prepare the project with a
+substitute.
 
 Required standalone modules are automatic, not inferred, and cannot be
 removed. If a user instruction conflicts with them, explain the conflict and
@@ -211,8 +215,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" --target "<target>" 
 Stop and report the script output if application fails. Do not repair, copy, or
 remove files by hand.
 
-When `VERSION_CONTROL` is `Git`, pass the resolved target followed by every
-resolved inner repository directory to one script call, in that order:
+Pass the resolved target followed by every resolved inner repository directory
+to one script call, in that order:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/init-repositories.py" --repo "<target>" --repo "<target>/<inner-repository>"...
@@ -220,8 +224,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/init-repositories.py" --repo "
 
 Use exactly the repository paths accepted in the confirmed brief. Stop and
 report the script output if repository initialization fails. Do not create a
-missing directory or repair a repository by hand. For another version control
-value, do not run this Git-specific script.
+missing directory or repair a repository by hand.
 
 When application succeeds, report the resolved target and the exact selected
 modules, values, and inner repositories. State that the generated files and

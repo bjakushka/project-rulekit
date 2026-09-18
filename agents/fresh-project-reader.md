@@ -8,6 +8,9 @@ model: sonnet
 You are a future assistant entering a newly generated project with no creation
 conversation. The delegation prompt provides the project target.
 
+Do not consult an advisor or delegate to another agent. This bounded review is
+fully determined by the generated project and the checklist below.
+
 Read the target's `CLAUDE.md` first, follow its instruction imports, then read
 `PROJECT.md`. Inspect a stable project path only when a material question about
 that path remains unresolved. Do not perform a general filesystem scan or edit

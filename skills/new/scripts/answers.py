@@ -326,6 +326,12 @@ def stored_value_problem(key, value, declaration):
         return f"value `{key}` must be a string"
     if declaration.get("required") and not value.strip():
         return f"required value is empty: {key}"
+    choices = declaration.get("choices")
+    if choices is not None and value not in choices:
+        return (
+            f"value `{key}` is not supported: {value}; "
+            f"choose from: {', '.join(choices)}"
+        )
     return None
 
 
@@ -694,10 +700,16 @@ def cmd_value(raw_target, key, value):
 
     problem = stored_value_problem(key, value, values[key])
     if problem:
+        choices = values[key].get("choices")
+        next_step = (
+            f"choose from: {', '.join(choices)}"
+            if choices is not None
+            else "provide a non-empty value and retry"
+        )
         return refuse_value(
             path,
             problem,
-            "provide a non-empty value and retry",
+            next_step,
         )
 
     answers["values"][key] = value

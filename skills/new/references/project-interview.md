@@ -7,6 +7,12 @@ Guide for turning a new-project conversation into a temporary project brief.
 Treat the invocation prose as the first interview answer. Use everything the
 user already said before asking a follow-up question.
 
+When no project prose is available, use `AskUserQuestion`; do not end the turn
+with a plain chat question. Ask the user to enter the description through the
+built-in free-text response. Fixed options may expose only unresolved manifest
+choices as partial answers; never invent a project description or suggest a
+test project.
+
 The result must orient a future assistant that has none of this conversation.
 Learn enough to explain:
 
@@ -21,7 +27,9 @@ facts already expressed by the generated file map do not.
 
 Keep repository names, paths, purposes, and other layout facts out of the
 context paragraph. They belong in the separately reviewed repository summary
-and the generated `Repository layout` section.
+and the generated `Repository layout` section. If one user answer contains both
+project context and repository facts, split them accordingly instead of copying
+the repository facts into the context paragraph.
 
 Synthesize the context as one short English paragraph, normally two to four
 sentences. Interpret the user's meaning; do not copy or literally translate the

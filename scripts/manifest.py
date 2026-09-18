@@ -44,6 +44,7 @@ MODULE_FIELDS = {
 }
 LOAD_VALUES = {"always", "on-demand"}
 VALUE_FIELDS = {
+    "choices": (list, type(None)),
     "default": (str, type(None)),
     "prompt": (str,),
     "required": (bool,),
@@ -166,8 +167,11 @@ def cmd_values(manifest):
         required = "required" if value.get("required") else "optional"
         default = value.get("default")
         default_flag = "no default" if default is None else f"default={default}"
+        choices = value.get("choices")
+        choice_flags = [] if choices is None else [f"choices={','.join(choices)}"]
 
-        print(f"{key}  [{required}, {default_flag}]")
+        flags = ", ".join([required, default_flag, *choice_flags])
+        print(f"{key}  [{flags}]")
         if value.get("prompt"):
             print(f"    {value['prompt']}")
     return 0
@@ -214,6 +218,16 @@ def check_schema(manifest, problems):
         for field in value:
             if field not in VALUE_FIELDS:
                 problems.append(f"{key}: unknown field `{field}`")
+        choices = value.get("choices")
+        if isinstance(choices, list):
+            if not choices:
+                problems.append(f"{key}: `choices` must not be empty")
+            elif not all(isinstance(choice, str) and choice for choice in choices):
+                problems.append(f"{key}: `choices` must contain non-empty strings")
+            elif len(choices) != len(set(choices)):
+                problems.append(f"{key}: `choices` contains duplicates")
+            elif value.get("default") is not None and value["default"] not in choices:
+                problems.append(f"{key}: `default` must be one of `choices`")
 
 
 def check_keys(manifest, problems):
