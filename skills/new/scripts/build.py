@@ -237,7 +237,12 @@ def markdown_bullet(path, description):
 def wrapped_prose(text):
     paragraphs = re.split(r"\n\s*\n", text.strip())
     return "\n\n".join(
-        textwrap.fill(" ".join(paragraph.split()), width=80)
+        textwrap.fill(
+            " ".join(paragraph.split()),
+            width=80,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
         for paragraph in paragraphs
     )
 
@@ -252,8 +257,10 @@ def repository_layout_block(version_control, repositories):
         "",
         f"Version control: {version_control}.",
         "",
-        "The outer repository holds project instructions, Rulekit state, and "
-        "workspace-level intake and coordination files.",
+        *wrapped_prose(
+            "The outer repository holds project instructions, Rulekit state, "
+            "and workspace-level intake and coordination files."
+        ).splitlines(),
         "",
         "Inner repositories:",
         "",
