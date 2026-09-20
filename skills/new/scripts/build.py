@@ -16,26 +16,22 @@ Exit codes:
 """
 
 import argparse
-import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import textwrap
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 
 import answers
+import render as project_render
 
 
 FILES_DIRECTORY = "files"
-STATE_FILENAME = ".kit.json"
-IMPORTS_START = "<!-- kit:imports -->"
-IMPORTS_END = "<!-- /kit:imports -->"
-PLACEHOLDER = re.compile(r"{{([A-Z][A-Z0-9_]*)}}")
+STATE_FILENAME = project_render.STATE_FILENAME
 
 
 CommandError = answers.CommandError
@@ -136,17 +132,8 @@ def validated_inputs(raw_target):
     modules, values = answers.load_manifest_sections(
         path, "prepare project preview", "modules", "values"
     )
-    problems = [
-        reason
-        for reason, _next_step in answers.module_selection_problems(
-            modules, draft["modules"], require_complete=True
-        )
-    ]
-    problems.extend(answers.value_problems(values, draft["values"]))
-    problems.extend(
-        answers.brief_problems(
-            draft["brief"], modules, draft["modules"], require_complete=True
-        )
+    problems = project_render.specification_problems(
+        draft, modules, values, require_complete=True
     )
     if problems:
         raise CommandError(
@@ -157,181 +144,6 @@ def validated_inputs(raw_target):
         )
 
     return target, preview, draft, modules, values
-
-
-def module_rule_files(module):
-    directory = answers.KIT / "template" / "rules" / module
-    if directory.is_dir():
-        return sorted(directory.glob("*.md"))
-    return [directory.with_suffix(".md")]
-
-
-def module_entry_point(module):
-    directory = answers.KIT / "template" / "rules" / module
-    if directory.is_dir():
-        return Path("rules") / module / "INDEX.md"
-    return Path("rules") / f"{module}.md"
-
-
-def scaffold_output_path(name):
-    return answers.scaffold_output_path(name)
-
-
-def resolved_values(declarations, stored):
-    values = {}
-    for key in sorted(declarations):
-        if key in stored:
-            values[key] = stored[key]
-        elif declarations[key].get("default") is not None:
-            values[key] = declarations[key]["default"]
-    return values
-
-
-def render_claude(
-    template, modules, values, module_declarations, value_declarations
-):
-    text = template.read_text(encoding="utf-8")
-    rendered_values = resolved_values(value_declarations, values)
-
-    for key, value in rendered_values.items():
-        text = text.replace(f"{{{{{key}}}}}", value)
-
-    remaining = sorted(set(PLACEHOLDER.findall(text)))
-    if remaining:
-        raise CommandError(
-            2,
-            "failed to render CLAUDE.md",
-            f"template placeholders have no value: {', '.join(remaining)}",
-            "declare and collect every template value, then retry",
-        )
-
-    imports = [
-        f"@{module_entry_point(name).as_posix()}"
-        for name in modules
-        if module_declarations[name].get("load") == "always"
-    ]
-    block = "\n".join([IMPORTS_START, *sorted(imports), IMPORTS_END])
-    pattern = re.compile(
-        rf"^{re.escape(IMPORTS_START)}$.*?^{re.escape(IMPORTS_END)}$",
-        flags=re.MULTILINE | re.DOTALL,
-    )
-    text, replacements = pattern.subn(block, text)
-    if replacements != 1:
-        raise CommandError(
-            2,
-            "failed to render CLAUDE.md",
-            "the template must contain exactly one complete `kit:imports` block",
-            "restore or fix template/CLAUDE.md, then retry",
-        )
-    return text, rendered_values
-
-
-def markdown_bullet(path, description):
-    return textwrap.fill(
-        f"- `{path}` - {description}",
-        width=80,
-        subsequent_indent="  ",
-    )
-
-
-def wrapped_prose(text):
-    paragraphs = re.split(r"\n\s*\n", text.strip())
-    return "\n\n".join(
-        textwrap.fill(
-            " ".join(paragraph.split()),
-            width=80,
-            break_long_words=False,
-            break_on_hyphens=False,
-        )
-        for paragraph in paragraphs
-    )
-
-
-def project_context_block(context):
-    return f"# Project context\n\n{wrapped_prose(context)}"
-
-
-def repository_layout_block(version_control, repositories):
-    lines = [
-        "## Repository layout",
-        "",
-        f"Version control: {version_control}.",
-        "",
-        *wrapped_prose(
-            "The outer repository holds project instructions, Rulekit state, "
-            "and workspace-level intake and coordination files."
-        ).splitlines(),
-        "",
-        "Inner repositories:",
-        "",
-    ]
-    lines.extend(
-        f"- `{repository['path']}/`"
-        for repository in repositories
-    )
-    return "\n".join(lines)
-
-
-def file_map_block(draft):
-    return "\n".join(
-        markdown_bullet(f"{repository['path']}/", repository["purpose"])
-        for repository in draft["brief"]["repositories"]
-    )
-
-
-def render_project(template, draft, modules, rendered_values):
-    text = template.read_text(encoding="utf-8")
-    if "VERSION_CONTROL" not in rendered_values:
-        raise CommandError(
-            2,
-            "failed to render PROJECT.md",
-            "the manifest must declare a resolved `VERSION_CONTROL` value",
-            "restore or fix the manifest value declaration, then retry",
-        )
-    blocks = {
-        "FILE_MAP": file_map_block(draft),
-        "PROJECT_CONTEXT": project_context_block(draft["brief"]["context"]),
-        "REPOSITORY_LAYOUT": repository_layout_block(
-            rendered_values["VERSION_CONTROL"], draft["brief"]["repositories"]
-        ),
-    }
-
-    for key, block in blocks.items():
-        marker = f"{{{{{key}}}}}"
-        if text.count(marker) != 1:
-            raise CommandError(
-                2,
-                "failed to render PROJECT.md",
-                f"the template must contain exactly one `{marker}` marker",
-                "restore or fix template/PROJECT.tmpl.md, then retry",
-            )
-        text = text.replace(marker, block)
-
-    remaining = sorted(set(PLACEHOLDER.findall(text)))
-    if remaining:
-        raise CommandError(
-            2,
-            "failed to render PROJECT.md",
-            f"template markers have no renderer: {', '.join(remaining)}",
-            "declare a renderer for every PROJECT.md template marker",
-        )
-    return text
-
-
-def gitignore_pattern(path):
-    escaped = "".join(
-        f"\\{character}" if character in "!#*?[] " else character
-        for character in path
-    )
-    return f"/{escaped}/"
-
-
-def render_gitignore(repositories):
-    patterns = sorted(
-        gitignore_pattern(repository["path"])
-        for repository in repositories
-    )
-    return "\n".join(patterns) + "\n"
 
 
 def snapshot(directory):
@@ -552,66 +364,14 @@ def cmd_prepare(raw_target):
     destination = preview / FILES_DIRECTORY
 
     try:
-        claude, values = render_claude(
-            answers.KIT / "template" / "CLAUDE.md",
-            draft["modules"],
-            draft["values"],
-            modules,
-            values,
-        )
-        (staging / "CLAUDE.md").write_text(claude, encoding="utf-8")
-        project = render_project(
-            answers.KIT / "template" / "PROJECT.tmpl.md",
+        rendered = project_render.render_tree(
+            answers.KIT,
+            staging,
             draft,
             modules,
             values,
+            commit,
         )
-        (staging / "PROJECT.md").write_text(project, encoding="utf-8")
-
-        repositories = draft["brief"]["repositories"]
-        for repository in repositories:
-            (staging / repository["path"]).mkdir(parents=True)
-
-        uses_git = values["VERSION_CONTROL"].casefold() == "git"
-        if uses_git:
-            (staging / ".gitignore").write_text(
-                render_gitignore(repositories), encoding="utf-8"
-            )
-
-        copied_rules = 0
-        for module in draft["modules"]:
-            for source in module_rule_files(module):
-                relative = source.relative_to(answers.KIT / "template")
-                output = staging / relative
-                output.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(source, output)
-                copied_rules += 1
-
-        copied_scaffolds = 0
-        for module in draft["modules"]:
-            for name in modules[module]["scaffold"]:
-                source = answers.KIT / "template" / name
-                output = staging / scaffold_output_path(name)
-                if output.exists():
-                    raise CommandError(
-                        2,
-                        "failed to prepare module scaffold",
-                        f"multiple generated files use the path: {output}",
-                        "fix the manifest so every generated path is unique",
-                    )
-                output.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(source, output)
-                copied_scaffolds += 1
-
-        state = {
-            "kit": {"commit": commit},
-            "modules": sorted(draft["modules"]),
-            "values": values,
-        }
-        with (staging / STATE_FILENAME).open("w", encoding="utf-8") as handle:
-            json.dump(state, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-
         install_preview(staging, destination)
         staging = None
     except OSError as error:
@@ -626,11 +386,13 @@ def cmd_prepare(raw_target):
             shutil.rmtree(staging, ignore_errors=True)
 
     reason = (
-        f"rendered CLAUDE.md and PROJECT.md, copied {copied_rules} rule file(s) "
-        f"and {copied_scaffolds} scaffold file(s), created "
-        f"{len(repositories)} inner repository directory(s), and wrote .kit.json"
+        "rendered CLAUDE.md and PROJECT.md, copied "
+        f"{rendered['copied_rules']} rule file(s) and "
+        f"{rendered['copied_scaffolds']} scaffold file(s), created "
+        f"{rendered['repositories']} inner repository directory(s), and wrote "
+        ".kit.json"
     )
-    if uses_git:
+    if rendered["uses_git"]:
         reason += " and .gitignore"
     next_step = "inspect the exact preview before applying it"
     if changed_sources:

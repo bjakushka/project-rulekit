@@ -18,6 +18,10 @@ This first version is read-only. Inspect an existing project, map what is there
 to the current Rulekit catalogue, print one short diagnostic report, and stop.
 Do not write any file or invoke a migration or review workflow.
 
+The later interactive phase follows
+[references/reconciliation.md](references/reconciliation.md). Do not load or
+apply that guidance during this diagnostic-only version.
+
 Treat `$ARGUMENTS` as the target path. Use the current working directory when
 the argument is empty. Stop if the target does not exist or is not a directory.
 

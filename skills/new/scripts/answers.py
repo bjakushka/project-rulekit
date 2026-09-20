@@ -20,10 +20,8 @@ Exit codes:
 import argparse
 import json
 import os
-import re
 import sys
 import tempfile
-from collections import Counter
 from pathlib import Path
 
 
@@ -43,6 +41,10 @@ MANIFEST = KIT / "manifest.json"
 PREVIEW_DIRECTORY = ".kit-preview"
 ANSWERS_FILENAME = "answers.json"
 
+sys.path.insert(0, str(KIT / "scripts"))
+
+import render as project_render
+
 EMPTY_ANSWERS = {
     "brief": {
         "context": None,
@@ -53,24 +55,7 @@ EMPTY_ANSWERS = {
 }
 
 BRIEF_KEYS = ("context", "repositories")
-RESERVED_TARGET_PATHS = (
-    ".git",
-    ".gitignore",
-    ".kit-preview",
-    ".kit.json",
-    "CLAUDE.md",
-    "PROJECT.md",
-    "rules",
-)
-
-
-class CommandError(Exception):
-    def __init__(self, exit_code, result, reason, next_step):
-        super().__init__(reason)
-        self.exit_code = exit_code
-        self.result = result
-        self.reason = reason
-        self.next_step = next_step
+CommandError = project_render.ProjectError
 
 
 def report(result, reason, next_step, stream=sys.stdout):
@@ -251,203 +236,12 @@ def save_answers(path, answers, operation):
         )
 
 
-def module_selection_problems(modules, selected, require_complete=False):
-    if not all(isinstance(name, str) for name in selected):
-        return [("module names must be strings", "replace invalid module names")]
-
-    problems = []
-    duplicates = sorted(
-        name for name, count in Counter(selected).items() if count > 1
-    )
-    if duplicates:
-        problems.append(
-            (
-                f"module names were repeated: {', '.join(duplicates)}",
-                "pass every selected module exactly once",
-            )
-        )
-
-    unknown = sorted(set(selected) - set(modules))
-    if unknown:
-        problems.append(
-            (
-                f"unknown modules: {', '.join(unknown)}",
-                f"choose from: {', '.join(sorted(modules))}",
-            )
-        )
-
-    selected_set = set(selected)
-    if require_complete:
-        required = sorted(
-            name
-            for name, module in modules.items()
-            if module.get("required") and module.get("group") is None
-        )
-        missing = sorted(set(required) - selected_set)
-        if missing:
-            problems.append(
-                (
-                    f"required modules are missing: {', '.join(missing)}",
-                    "add the missing modules and retry",
-                )
-            )
-
-    groups = {}
-    for name, module in modules.items():
-        group = module.get("group")
-        if group is not None:
-            groups.setdefault(group, []).append(name)
-
-    for group in sorted(groups):
-        members = sorted(groups[group])
-        chosen = sorted(selected_set.intersection(members))
-        required_group = any(modules[name].get("required") for name in members)
-        if len(chosen) > 1:
-            problems.append(
-                (
-                    f"group `{group}` allows one module but selected: "
-                    f"{', '.join(chosen)}",
-                    f"choose one of: {', '.join(members)}",
-                )
-            )
-        elif require_complete and required_group and not chosen:
-            problems.append(
-                (
-                    f"required group `{group}` has no selected module",
-                    f"choose one of: {', '.join(members)}",
-                )
-            )
-
-    return problems
-
-
-def stored_value_problem(key, value, declaration):
-    if not isinstance(value, str):
-        return f"value `{key}` must be a string"
-    if declaration.get("required") and not value.strip():
-        return f"required value is empty: {key}"
-    choices = declaration.get("choices")
-    if choices is not None and value not in choices:
-        return (
-            f"value `{key}` is not supported: {value}; "
-            f"choose from: {', '.join(choices)}"
-        )
-    return None
-
-
-def value_problems(values, selected):
-    problems = []
-    unknown = sorted(set(selected) - set(values))
-    if unknown:
-        problems.append(f"unknown value keys: {', '.join(unknown)}")
-
-    required = sorted(
-        key for key, declaration in values.items()
-        if declaration.get("required")
-    )
-    missing = sorted(set(required) - set(selected))
-    if missing:
-        problems.append(f"required values are missing: {', '.join(missing)}")
-
-    for key in sorted(set(selected).intersection(values)):
-        problem = stored_value_problem(key, selected[key], values[key])
-        if problem:
-            problems.append(problem)
-    return problems
-
-
-def scaffold_output_path(name):
-    path = Path(name)
-    suffix = ".tmpl.md"
-    if path.is_absolute() or ".." in path.parts or not path.name.endswith(suffix):
-        raise CommandError(
-            2,
-            "failed to validate project brief",
-            f"invalid scaffold template path in the manifest: {name}",
-            "run `python3 scripts/manifest.py check` and fix the manifest",
-        )
-    return path.with_name(f"{path.name[:-len(suffix)]}.md")
-
-
-def normalize_repository_path(raw_path):
-    path = raw_path.strip().rstrip("/")
-    if not path:
-        return None, "repository path is empty"
-    if path.startswith("/") or "\\" in path:
-        return None, f"repository path must be relative and use `/`: {raw_path}"
-    if any(ord(character) < 32 for character in path):
-        return None, f"repository path contains a control character: {raw_path}"
-
-    parts = path.split("/")
-    if any(part in ("", ".", "..", "~") for part in parts):
-        return None, f"repository path is not normalized or safe: {raw_path}"
-    if re.match(r"^[A-Za-z]:", parts[0]):
-        return None, f"repository path must not use a drive prefix: {raw_path}"
-    return "/".join(parts), None
-
-
-def path_parts(path):
-    return tuple(part.casefold() for part in path.split("/"))
-
-
-def paths_overlap(left, right):
-    left_parts = path_parts(left)
-    right_parts = path_parts(right)
-    common = min(len(left_parts), len(right_parts))
-    return left_parts[:common] == right_parts[:common]
-
-
-def generated_target_paths(modules, selected_modules):
-    generated = set(RESERVED_TARGET_PATHS)
-    for name in selected_modules:
-        module = modules.get(name)
-        if module is None:
-            continue
-        for scaffold in module.get("scaffold", []):
-            generated.add(scaffold_output_path(scaffold).as_posix())
-    return sorted(generated)
-
-
-def brief_problems(brief, modules, selected_modules, require_complete=False):
-    problems = []
-    context = brief["context"]
-    if require_complete and (context is None or not context.strip()):
-        problems.append("project brief context is missing or empty")
-    elif isinstance(context, str) and not context.strip():
-        problems.append("project brief context is empty")
-
-    repositories = brief["repositories"]
-    if require_complete and not repositories:
-        problems.append("project brief has no inner repositories")
-
-    normalized = []
-    for repository in repositories:
-        path, problem = normalize_repository_path(repository["path"])
-        if problem:
-            problems.append(problem)
-            continue
-        if path != repository["path"]:
-            problems.append(f"repository path is not normalized: {repository['path']}")
-        if not repository["purpose"].strip():
-            problems.append(f"repository purpose is empty: {repository['path']}")
-        normalized.append(path)
-
-    for index, path in enumerate(normalized):
-        for other in normalized[index + 1:]:
-            if paths_overlap(path, other):
-                problems.append(f"repository paths overlap: {path}, {other}")
-
-    reserved = generated_target_paths(modules, selected_modules)
-    for path in normalized:
-        conflicts = [
-            candidate for candidate in reserved if paths_overlap(path, candidate)
-        ]
-        if conflicts:
-            problems.append(
-                f"repository path `{path}` conflicts with generated or reserved "
-                f"path: {conflicts[0]}"
-            )
-    return problems
+module_selection_problems = project_render.module_selection_problems
+stored_value_problem = project_render.stored_value_problem
+value_problems = project_render.value_problems
+scaffold_output_path = project_render.scaffold_output_path
+normalize_repository_path = project_render.normalize_repository_path
+brief_problems = project_render.brief_problems
 
 
 def cmd_init(raw_target):
