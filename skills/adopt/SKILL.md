@@ -49,6 +49,11 @@ entry points. The manifest commands return the modules, their entry-point
 paths, and values available in the current Rulekit catalogue; use only those
 reported names and paths in the mapping.
 
+The active catalogue and tooling always come from `${CLAUDE_PLUGIN_ROOT}`.
+Treat any Rulekit implementation inside the target as a project artifact; do
+not compare its version or file layout with the active catalogue. Delegate any
+nested-repository inspection to the project reader below.
+
 Run these commands separately. Do not combine them with other shell commands:
 
 ```bash
@@ -65,7 +70,10 @@ commands and prepare command described below are allowed.
 
 Use the resolved target printed by `scan.py` from then on. Stop when the scan or
 manifest check fails. The scanner reports repository candidates and files; it
-does not establish that every nested Git root belongs to the project.
+does not establish that every nested Git root belongs to the project. When its
+root inventory is not truncated, trust it for standard-file existence.
+Rulekit state exists only at `<target>/.kit.json`; a nested manifest is not
+Rulekit state for the target.
 
 ## Start the project reader
 
@@ -79,7 +87,8 @@ Start the read-only `rulekit:adopt-project-reader` agent. Give it only:
 Pass nothing else. The reader must inspect the project independently. Its main
 repository question is whether each nested Git root belongs to the project and
 what concise purpose should represent it in Rulekit's `Inner repositories`
-section.
+section. It may inspect files inside those repositories as needed to answer that
+question.
 
 ## Analyze the Rulekit mapping
 
@@ -93,13 +102,27 @@ Read the current Rulekit core template and the reported entry point of every
 available module. Use the manifest output as the catalogue; do not invent module
 names or guess whether a module is a file or directory.
 
+Limit semantic comparison to the target's outer instruction system. Do not read
+files inside nested repositories during the main analysis; use the project
+reader's verified evidence for their roles. Never compare nested content with
+the Rulekit core, catalogue, modules, or tooling.
+
 Infer project type, module choices, and values only after reading the relevant
-content. Repository markers and filenames are evidence, not decisions. Use:
+content. Keep module selection separate from fit: a required module is selected
+because the manifest requires it, not because existing behavior matches it.
+Repository markers and filenames are evidence, not decisions. For project type,
+optional choices, and values, use:
 
 - `exact` for a mechanical fact or an unambiguous statement in a read file,
   regardless of why that statement was originally added
 - `strong` when one interpretation is materially better supported
 - `unresolved` when multiple plausible interpretations remain
+
+For every module, state selection separately as `required`, `selected`, or `not
+selected`. For a required group choice, use `selected from required group`.
+State fit separately as `exact`, `strong`, `unresolved`, `conflict`, or `not
+established`. Do not call fit `exact` merely because the module is required or
+a similarly named file exists.
 
 Compare existing instructions with the current core and modules semantically.
 Identify only material behavior that is uncovered, contradictory, or genuinely
@@ -122,7 +145,8 @@ the report to a file or open it in a review UI. Use:
 2. `Project` - a two- or three-sentence verified summary
 3. `Repositories` - detected Git roots, nesting, and verified roles; use
    Markdown bullets with the path followed by its purpose
-4. `Rulekit draft` - proposed type, modules, and values with evidence labels
+4. `Rulekit draft` - proposed type, modules, and values; give every module
+   separate selection and fit statuses, and label inferred type and values
 5. `Standard files` - which instruction, context, inbox/backlog, rules, and
    Rulekit state paths exist or are missing
 6. `Findings` - at most five uncovered rules, conflicts, or material
@@ -133,6 +157,10 @@ the report to a file or open it in a review UI. Use:
 Do not include the full scanner inventory, a list of every file read, rejected
 reader guesses, or a migration plan. Do not ask the listed questions in this
 report.
+
+Report expected missing standard files in `Standard files`, but their absence
+before adoption is not by itself a finding. This includes `.kit.json`, `rules/`,
+generated imports, and optional scaffold files.
 
 State whether the project appears ready for those decisions. At this point no
 files have changed and no migration preview exists.
@@ -159,8 +187,7 @@ treat evidence labels or a high-confidence inference as approval.
 After confirmation, initialize the adoption answers workspace:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
-  --target "<resolved-target>" init --mode adopt
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<resolved-target>" init --mode adopt
 ```
 
 Store the exact confirmed mapping through the shared answers commands. Replace
@@ -168,31 +195,25 @@ the complete module and repository lists in one call each; store every value
 separately:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
-  --target "<resolved-target>" brief context "<confirmed-context>"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
-  --target "<resolved-target>" brief repositories \
-  --repo "<path>" "<purpose>"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
-  --target "<resolved-target>" modules <selected-module>...
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
-  --target "<resolved-target>" value <key> <value>
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
-  --target "<resolved-target>" check
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<resolved-target>" brief context "<confirmed-context>"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<resolved-target>" brief repositories --repo "<path>" "<purpose>"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<resolved-target>" modules <selected-module>...
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<resolved-target>" value <key> <value>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<resolved-target>" check
 ```
 
 Repeat `--repo` in the repositories command and repeat the value command for
-every confirmed value. Do not create or edit `answers.json` directly. Stop if a
-command refuses; correct the confirmed mapping with the owner and retry through
-the same command.
+every confirmed value. Run every allowed Bash invocation on one physical line
+so it matches the skill's permission rule. Do not create or edit `answers.json`
+directly. Stop if a command refuses; correct the confirmed mapping with the
+owner and retry through the same command.
 
 ## Prepare the clean preview
 
 After `check` succeeds, run `prepare.py` with only the resolved target:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/prepare.py" \
-  --target "<resolved-target>"
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/prepare.py" --target "<resolved-target>"
 ```
 
 Do not construct the preview by hand. Stop if the script refuses: its checks
