@@ -18,6 +18,13 @@
       "scaffold": ["inbox.tmpl.md"],
       "skills": []
     },
+    "llm_instructions": {
+      "group": null,
+      "load": "always",
+      "required": false,
+      "scaffold": [],
+      "skills": []
+    },
     "project-context": {
       "group": null,
       "load": "always",

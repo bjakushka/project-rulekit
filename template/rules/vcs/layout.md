@@ -7,9 +7,10 @@
 - The outer ignore only separates repository histories; it does not restrict
   reading or editing inside the inner repo
 - Leave paths ignored by the inner repo itself alone unless explicitly permitted
-- **An inner repo NEVER contains LLM instruction files** - no `CLAUDE.md`, no 
-  `AGENTS.md`, no `rules/`, no `.claude/`. That is the whole point of the split: 
-  the inner repo is the project itself, the outer one is the harness around it. 
-  Instructions about the inner repo live in the outer repo
+- An inner repo never contains active LLM instructions governing work on that
+  repository - no active `CLAUDE.md`, `AGENTS.md`, `rules/`, or `.claude/`.
+  Keeping them in the outer repo preserves one workspace-level source of truth
+- LLM instructions produced by the project are artifacts rather than active
+  workspace instructions and may live in an inner repo
 - Never mix changes from two repos in one commit
 - Before any repo operation, know which repo you are in
