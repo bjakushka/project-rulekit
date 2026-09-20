@@ -155,6 +155,8 @@ def cmd_list(manifest):
 
         suffix = f"  [{', '.join(flags)}]" if flags else ""
         print(f"{key}{suffix}")
+        source = Path("template") / entry_point(TEMPLATE, key)
+        print(f"    source: {source.as_posix()}")
         if desc:
             print(f"    {desc}")
     return 0

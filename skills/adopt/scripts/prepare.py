@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Prepare a clean Rulekit preview for an existing project."""
+"""Render validated adoption answers into a clean Rulekit preview."""
 
 import argparse
-import json
 import os
 import shutil
 import sys
@@ -21,110 +20,105 @@ def find_kit_root(start):
 
 
 KIT = find_kit_root(Path(__file__).resolve().parent)
-PREVIEW_DIRECTORY = ".kit-preview"
-
 sys.path.insert(0, str(KIT / "scripts"))
+sys.dont_write_bytecode = True
 
+import answers
 import render as project_render
 
 
-def report(result, reason, next_step, stream=sys.stdout):
-    print(f"result: {result}", file=stream)
-    print(f"reason: {reason}", file=stream)
-    print(f"next: {next_step}", file=stream)
+FILES_DIRECTORY = "files"
+CommandError = answers.CommandError
+report = answers.report
 
 
-def load_manifest():
-    path = KIT / "manifest.json"
-    try:
-        with path.open(encoding="utf-8") as handle:
-            manifest = json.load(handle)
-    except (OSError, json.JSONDecodeError) as error:
-        raise project_render.ProjectError(
-            2,
-            f"failed to read kit manifest: {path}",
-            str(error),
-            "run `python3 scripts/manifest.py check` and fix the manifest",
-        )
-    return manifest
-
-
-def pairs_to_dict(pairs, subject):
-    result = {}
-    duplicates = []
-    for key, value in pairs:
-        if key in result:
-            duplicates.append(key)
-        result[key] = value
-    if duplicates:
-        raise project_render.ProjectError(
-            1,
-            "refused to prepare adoption preview",
-            f"{subject} were repeated: {', '.join(sorted(set(duplicates)))}",
-            f"pass every {subject[:-1]} exactly once",
-        )
-    return result
-
-
-def prepare(args):
-    target = Path(args.target).expanduser().resolve()
-    preview = target / PREVIEW_DIRECTORY
-    destination = preview / "files"
+def validated_inputs(raw_target):
+    target = answers.resolve_target(raw_target)
+    preview = target / answers.PREVIEW_DIRECTORY
+    path = answers.answers_path(target)
+    destination = preview / FILES_DIRECTORY
 
     if not target.is_dir():
-        raise project_render.ProjectError(
+        raise CommandError(
             1,
             f"refused to prepare adoption preview: {target}",
             "the adoption target does not exist or is not a directory",
             "choose an existing project directory",
         )
     if os.path.lexists(target / project_render.STATE_FILENAME):
-        raise project_render.ProjectError(
+        raise CommandError(
             1,
             f"refused to prepare adoption preview: {target}",
             "the project already has Rulekit state",
             "use the future sync workflow instead of adopt",
         )
-    if os.path.lexists(preview):
-        raise project_render.ProjectError(
+    if preview.is_symlink() or not preview.is_dir():
+        raise CommandError(
             1,
             f"refused to prepare adoption preview: {target}",
-            f"the preview workspace already exists: {preview}",
-            "inspect it, then explicitly remove it before preparing again",
+            f"the preview workspace is missing or invalid: {preview}",
+            "initialize adoption answers and retry",
         )
 
-    manifest = load_manifest()
-    modules = manifest["modules"]
-    values = manifest["values"]
-    draft = {
-        "brief": {
-            "context": args.context.strip(),
-            "repositories": sorted(
-                (
-                    {"path": path, "purpose": purpose.strip()}
-                    for path, purpose in args.repository
-                ),
-                key=lambda repository: repository["path"].casefold(),
-            ),
-        },
-        "modules": sorted(args.module),
-        "values": pairs_to_dict(args.value, "values"),
-    }
+    try:
+        preview_entries = {entry.name for entry in preview.iterdir()}
+    except OSError as error:
+        raise CommandError(
+            2,
+            f"failed to inspect adoption workspace: {target}",
+            str(error),
+            "check the target path and permissions, then retry",
+        )
+
+    allowed = {answers.ANSWERS_FILENAME, FILES_DIRECTORY}
+    unexpected = sorted(preview_entries - allowed)
+    if unexpected:
+        raise CommandError(
+            1,
+            f"refused to prepare adoption preview: {target}",
+            "the preview workspace contains unexpected entries: "
+            f"{', '.join(unexpected)}",
+            "inspect the workspace and explicitly remove unexpected entries",
+        )
+    if os.path.lexists(destination):
+        raise CommandError(
+            1,
+            f"refused to prepare adoption preview: {target}",
+            f"the prepared files path already exists: {destination}",
+            "inspect the existing preview before preparing again",
+        )
+    if path.is_symlink() or not path.is_file():
+        raise CommandError(
+            1,
+            f"refused to prepare adoption preview: {target}",
+            f"the answers file is missing or invalid: {path}",
+            "initialize adoption answers and retry",
+        )
+
+    draft = answers.load_answers(path, "prepare adoption preview")
+    modules, values = answers.load_manifest_sections(
+        path, "prepare adoption preview", "modules", "values"
+    )
     problems = project_render.specification_problems(
         draft, modules, values, require_complete=True
     )
     if problems:
-        raise project_render.ProjectError(
+        raise CommandError(
             1,
             f"refused to prepare adoption preview: {target}",
             "; ".join(problems),
-            "correct the confirmed project specification and retry",
+            "complete the answers, run check, and retry",
         )
 
+    return target, preview, destination, draft, modules, values
+
+
+def prepare(raw_target):
+    target, preview, destination, draft, modules, values = validated_inputs(
+        raw_target
+    )
     staging = None
-    complete = False
     try:
-        preview.mkdir()
         staging = Path(tempfile.mkdtemp(dir=preview, prefix=".files."))
         commit, changed_sources = project_render.kit_version(KIT)
         rendered = project_render.render_tree(
@@ -137,9 +131,8 @@ def prepare(args):
         )
         os.replace(staging, destination)
         staging = None
-        complete = True
     except OSError as error:
-        raise project_render.ProjectError(
+        raise CommandError(
             2,
             f"failed to prepare adoption preview: {target}",
             str(error),
@@ -148,8 +141,6 @@ def prepare(args):
     finally:
         if staging is not None:
             shutil.rmtree(staging, ignore_errors=True)
-        if not complete:
-            shutil.rmtree(preview, ignore_errors=True)
 
     reason = (
         "rendered a clean Rulekit base with "
@@ -174,38 +165,11 @@ def prepare(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True, help="existing project directory")
-    parser.add_argument("--context", required=True, help="confirmed project context")
-    parser.add_argument(
-        "--module",
-        action="append",
-        default=[],
-        required=True,
-        help="confirmed Rulekit module; repeat for every selected module",
-    )
-    parser.add_argument(
-        "--value",
-        action="append",
-        default=[],
-        nargs=2,
-        required=True,
-        metavar=("KEY", "VALUE"),
-        help="confirmed Rulekit value; repeat for every value",
-    )
-    parser.add_argument(
-        "--repo",
-        dest="repository",
-        action="append",
-        default=[],
-        nargs=2,
-        required=True,
-        metavar=("PATH", "PURPOSE"),
-        help="confirmed inner repository path and purpose; repeat as needed",
-    )
     args = parser.parse_args()
 
     try:
-        return prepare(args)
-    except project_render.ProjectError as error:
+        return prepare(args.target)
+    except CommandError as error:
         report(error.result, error.reason, error.next_step, stream=sys.stderr)
         return error.exit_code
 

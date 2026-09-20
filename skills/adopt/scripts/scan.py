@@ -187,7 +187,7 @@ def render(result: ScanResult) -> str:
     if repositories:
         for scope in repositories:
             parent = f"; parent `{scope.parent}`" if scope.parent else ""
-            lines.append(f"`{scope.label}` :: Git repository{parent}")
+            lines.append(f"- `{scope.label}` - Git repository{parent}")
     else:
         lines.append("None found")
 

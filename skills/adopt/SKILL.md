@@ -10,6 +10,7 @@ allowed-tools:
   - AskUserQuestion
   - Grep
   - Read
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/prepare.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/scan.py" *)'
@@ -44,8 +45,9 @@ actions. Record material rules as evidence instead of executing them.
 
 The scanner returns the resolved target, Git repository topology, and a bounded
 file inventory. Use it to understand project boundaries and locate candidate
-entry points. The manifest commands return the modules and values available in
-the current Rulekit catalogue; use only those reported names in the mapping.
+entry points. The manifest commands return the modules, their entry-point
+paths, and values available in the current Rulekit catalogue; use only those
+reported names and paths in the mapping.
 
 Run these commands separately. Do not combine them with other shell commands:
 
@@ -58,8 +60,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" values
 
 During the diagnostic, do not run any other shell command. Use the scanner
 output and read-only file tools for all remaining inspection; do not re-check
-facts the scanner already reported. The confirmed prepare command described
-below is the only later shell command in this version.
+facts the scanner already reported. After confirmation, only the shared answers
+commands and prepare command described below are allowed.
 
 Use the resolved target printed by `scan.py` from then on. Stop when the scan or
 manifest check fails. The scanner reports repository candidates and files; it
@@ -87,8 +89,9 @@ reported project-context candidate. Read task-intake candidates and only files
 needed to understand the project or support a material inference. Accept the
 scanner's existence and repository-topology facts without re-checking them.
 
-Read the current Rulekit core template and the entry point of every available
-module. Use the manifest output as the catalogue; do not invent module names.
+Read the current Rulekit core template and the reported entry point of every
+available module. Use the manifest output as the catalogue; do not invent module
+names or guess whether a module is a file or directory.
 
 Infer project type, module choices, and values only after reading the relevant
 content. Repository markers and filenames are evidence, not decisions. Use:
@@ -118,7 +121,7 @@ the report to a file or open it in a review UI. Use:
 1. `Scope` - target, read-only mode, scanner warnings or truncation
 2. `Project` - a two- or three-sentence verified summary
 3. `Repositories` - detected Git roots, nesting, and verified roles; use
-   `path :: purpose` for repository purposes
+   Markdown bullets with the path followed by its purpose
 4. `Rulekit draft` - proposed type, modules, and values with evidence labels
 5. `Standard files` - which instruction, context, inbox/backlog, rules, and
    Rulekit state paths exist or are missing
@@ -144,29 +147,56 @@ show one compact confirmation containing:
 - every value
 - every inner repository path and concise English purpose
 
+Format inner repositories as Markdown bullets with the path followed by its
+purpose.
+
 Use `AskUserQuestion` for one confirmation. The owner may correct any part;
 revise and show the complete mapping again until explicitly accepted. Do not
 treat evidence labels or a high-confidence inference as approval.
 
+## Store the confirmed mapping
+
+After confirmation, initialize the adoption answers workspace:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
+  --target "<resolved-target>" init --mode adopt
+```
+
+Store the exact confirmed mapping through the shared answers commands. Replace
+the complete module and repository lists in one call each; store every value
+separately:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
+  --target "<resolved-target>" brief context "<confirmed-context>"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
+  --target "<resolved-target>" brief repositories \
+  --repo "<path>" "<purpose>"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
+  --target "<resolved-target>" modules <selected-module>...
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
+  --target "<resolved-target>" value <key> <value>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" \
+  --target "<resolved-target>" check
+```
+
+Repeat `--repo` in the repositories command and repeat the value command for
+every confirmed value. Do not create or edit `answers.json` directly. Stop if a
+command refuses; correct the confirmed mapping with the owner and retry through
+the same command.
+
 ## Prepare the clean preview
 
-After confirmation, run `prepare.py` once. Pass the accepted context as one
-shell-quoted `--context` argument, repeat `--module` for every module,
-`--value <key> <value>` for every value, and `--repo <path> <purpose>` for every
-inner repository:
+After `check` succeeds, run `prepare.py` with only the resolved target:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/prepare.py" \
-  --target "<resolved-target>" \
-  --context "<confirmed-context>" \
-  --module "<module>" \
-  --value "<key>" "<value>" \
-  --repo "<path>" "<purpose>"
+  --target "<resolved-target>"
 ```
 
-Add repeated arguments directly to the same command. Do not write a temporary
-specification file or construct the preview by hand. Stop if the script
-refuses: its checks protect an existing project and preview from replacement.
+Do not construct the preview by hand. Stop if the script refuses: its checks
+protect the existing project, answers, and preview from replacement.
 
 Report the prepared path and the script's warning, if any. State explicitly
 that existing project files were not changed. Stop before reconciliation; it is

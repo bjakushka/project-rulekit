@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build and validate temporary interview answers for `rulekit:new`.
+"""Build and validate temporary project answers for Rulekit workflows.
 
 Commands:
     brief   show or replace one project brief answer
     check   validate that the answers are complete
-    init    create the target workspace and a new empty answers file
+    init    create a new empty answers workspace for `new` or `adopt`
     modules replace the selected module list
     value   set one declared value
 
@@ -75,7 +75,7 @@ def answers_path(raw_target):
 def report_existing(target, preview):
     raise CommandError(
         1,
-        f"refused to initialize project workspace: {target}",
+        f"refused to initialize answers workspace: {target}",
         f"the preview workspace already exists: {preview}",
         "inspect it, then explicitly remove it before starting again",
     )
@@ -244,7 +244,7 @@ normalize_repository_path = project_render.normalize_repository_path
 brief_problems = project_render.brief_problems
 
 
-def cmd_init(raw_target):
+def cmd_init(raw_target, mode):
     target = resolve_target(raw_target)
     preview = target / PREVIEW_DIRECTORY
     path = preview / ANSWERS_FILENAME
@@ -255,12 +255,28 @@ def cmd_init(raw_target):
     if os.path.lexists(target) and not target.is_dir():
         raise CommandError(
             1,
-            f"refused to initialize project workspace: {target}",
+            f"refused to initialize answers workspace: {target}",
             "the target exists and is not a directory",
-            "choose a missing, empty, or git-only target directory",
+            "choose a project directory",
         )
 
-    if target.is_dir():
+    if mode == "adopt" and not target.is_dir():
+        raise CommandError(
+            1,
+            f"refused to initialize adoption workspace: {target}",
+            "the adoption target does not exist or is not a directory",
+            "choose an existing project directory",
+        )
+
+    if mode == "adopt" and os.path.lexists(target / project_render.STATE_FILENAME):
+        raise CommandError(
+            1,
+            f"refused to initialize adoption workspace: {target}",
+            "the project already has Rulekit state",
+            "use the future sync workflow instead of adopt",
+        )
+
+    if mode == "new" and target.is_dir():
         try:
             entries = {entry.name for entry in target.iterdir()}
         except OSError as error:
@@ -278,15 +294,16 @@ def cmd_init(raw_target):
                 "choose a missing, empty, or git-only target directory",
             )
 
-    try:
-        target.mkdir(parents=True, exist_ok=True)
-    except OSError as error:
-        raise CommandError(
-            2,
-            f"failed to create target directory: {target}",
-            str(error),
-            "check the target path and permissions, then retry",
-        )
+    if mode == "new":
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            raise CommandError(
+                2,
+                f"failed to create target directory: {target}",
+                str(error),
+                "check the path and permissions, then retry",
+            )
 
     try:
         preview.mkdir()
@@ -340,7 +357,7 @@ def cmd_init(raw_target):
 
     report(
         f"initialized answers file: {path}",
-        "init created a new document with an empty brief, modules, and values",
+        f"{mode} init created a document with an empty brief, modules, and values",
         "collect project brief, module, and value answers",
     )
     return 0
@@ -560,9 +577,7 @@ def main():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument(
-        "--target", required=True, help="future project directory"
-    )
+    parser.add_argument("--target", required=True, help="project directory")
     commands = parser.add_subparsers(dest="command", required=True)
     brief = commands.add_parser("brief", help="show or replace a project brief answer")
     brief.add_argument("--list", action="store_true", help="show the brief contract")
@@ -577,7 +592,13 @@ def main():
         help="inner repository path and purpose",
     )
     commands.add_parser("check", help="validate that the answers are complete")
-    commands.add_parser("init", help="create a new empty answers file")
+    init = commands.add_parser("init", help="create a new empty answers file")
+    init.add_argument(
+        "--mode",
+        choices=("new", "adopt"),
+        required=True,
+        help="target policy for the workflow initializing the answers",
+    )
     modules = commands.add_parser("modules", help="replace the selected modules")
     modules.add_argument("names", nargs="*", help="complete module selection")
     value = commands.add_parser("value", help="set one declared value")
@@ -602,7 +623,7 @@ def main():
         if args.command == "check":
             return cmd_check(args.target)
         if args.command == "init":
-            return cmd_init(args.target)
+            return cmd_init(args.target, args.mode)
         if args.command == "modules":
             return cmd_modules(args.target, args.names)
         if args.command == "value":

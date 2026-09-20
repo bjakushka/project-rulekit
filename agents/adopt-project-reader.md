@@ -36,10 +36,11 @@ Answer these questions:
    documentation, or implementation entry points?
 4. What material uncertainty remains about the project or repository roles?
 
-Keep the report under 300 words. Format repository purposes and key paths as:
+Keep the report under 300 words. Format repository purposes and key paths as
+Markdown bullets:
 
 ```text
-`<path>` :: <short purpose>
+- `<path>` - <short purpose>
 ```
 
 Return only the report. Clearly distinguish what a read file states from what

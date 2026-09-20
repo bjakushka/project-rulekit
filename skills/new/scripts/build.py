@@ -23,6 +23,20 @@ import sys
 import tempfile
 from pathlib import Path
 
+
+def find_kit_root(start):
+    for directory in (start, *start.parents):
+        if (
+            (directory / ".claude-plugin" / "plugin.json").is_file()
+            and (directory / "manifest.json").is_file()
+        ):
+            return directory
+    raise RuntimeError(f"could not find the rulekit plugin root above: {start}")
+
+
+KIT = find_kit_root(Path(__file__).resolve().parent)
+sys.path.insert(0, str(KIT / "scripts"))
+
 sys.dont_write_bytecode = True
 
 import answers

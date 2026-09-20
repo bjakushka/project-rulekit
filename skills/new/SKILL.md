@@ -7,7 +7,7 @@ allowed-tools:
   - Read
   - 'Skill(rulekit:postreview *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
-  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" *)'
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/check-target.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/init-repositories.py" *)'
@@ -52,7 +52,7 @@ target by hand to make it pass.
 Initialize the preview workspace:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" init
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<target>" init --mode new
 ```
 
 Use the resolved target reported by `check-target.py`. `init` creates a missing
@@ -64,7 +64,7 @@ Read `${CLAUDE_SKILL_DIR}/references/project-interview.md`, then ask the script
 for the temporary brief contract:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" brief --list
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<target>" brief --list
 ```
 
 Treat the reported keys and argument shapes as the sole brief storage contract.
@@ -130,7 +130,7 @@ value questions.
    module was skipped and the selection did not change:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" modules <selected-module>...
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<target>" modules <selected-module>...
 ```
 
 Let the script sort and validate the names. If the user revises a choice, call
@@ -146,7 +146,7 @@ value for a required field.
 After each answer, store it through the script:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" value <key> <value>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<target>" value <key> <value>
 ```
 
 Optional values without an answer may remain absent.
@@ -175,7 +175,7 @@ directly.
 Run:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/answers.py" --target "<target>" check
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<target>" check
 ```
 
 If it reports multiple problems, address all of them through the interview and
