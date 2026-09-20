@@ -19,7 +19,6 @@ import argparse
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -36,46 +35,6 @@ STATE_FILENAME = project_render.STATE_FILENAME
 
 CommandError = answers.CommandError
 report = answers.report
-
-
-def run_git(*arguments):
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(answers.KIT), *arguments],
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-    except OSError as error:
-        raise CommandError(
-            2,
-            "failed to read the current kit version",
-            str(error),
-            "make Git available and retry",
-        )
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
-        raise CommandError(
-            2,
-            "failed to read the current kit version",
-            detail or f"Git exited with status {completed.returncode}",
-            "check that the plugin is inside its Git repository and retry",
-        )
-    return completed.stdout
-
-
-def kit_version():
-    changed = run_git(
-        "status",
-        "--porcelain",
-        "--untracked-files=all",
-        "--",
-        "manifest.json",
-        "template",
-    ).rstrip("\n")
-    paths = sorted(line[3:] for line in changed.splitlines() if line)
-    commit = run_git("rev-parse", "--verify", "HEAD").strip()
-    return commit, paths
 
 
 def workspace_paths(raw_target, operation):
@@ -359,7 +318,7 @@ def cmd_apply(raw_target):
 
 def cmd_prepare(raw_target):
     target, preview, draft, modules, values = validated_inputs(raw_target)
-    commit, changed_sources = kit_version()
+    commit, changed_sources = project_render.kit_version(answers.KIT)
     staging = Path(tempfile.mkdtemp(dir=preview, prefix=".files."))
     destination = preview / FILES_DIRECTORY
 

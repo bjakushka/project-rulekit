@@ -4,6 +4,7 @@
 import json
 import re
 import shutil
+import subprocess
 import textwrap
 from collections import Counter
 from pathlib import Path
@@ -31,6 +32,47 @@ class ProjectError(Exception):
         self.result = result
         self.reason = reason
         self.next_step = next_step
+
+
+def run_git(kit_root, *arguments):
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(kit_root), *arguments],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    except OSError as error:
+        raise ProjectError(
+            2,
+            "failed to read the current kit version",
+            str(error),
+            "make Git available and retry",
+        )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise ProjectError(
+            2,
+            "failed to read the current kit version",
+            detail or f"Git exited with status {completed.returncode}",
+            "check that the plugin is inside its Git repository and retry",
+        )
+    return completed.stdout
+
+
+def kit_version(kit_root):
+    changed = run_git(
+        kit_root,
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--",
+        "manifest.json",
+        "template",
+    ).rstrip("\n")
+    paths = sorted(line[3:] for line in changed.splitlines() if line)
+    commit = run_git(kit_root, "rev-parse", "--verify", "HEAD").strip()
+    return commit, paths
 
 
 def module_selection_problems(modules, selected, require_complete=False):

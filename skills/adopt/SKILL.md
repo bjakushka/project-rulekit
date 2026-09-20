@@ -1,26 +1,30 @@
 ---
 name: adopt
 description: >-
-  Diagnose how an existing project maps to Rulekit without changing it. Use
-  when the owner invokes rulekit:adopt for a project without Rulekit state.
+  Diagnose how an existing project maps to Rulekit, confirm the base mapping,
+  and prepare a clean migration preview. Use when the owner invokes
+  rulekit:adopt for a project without Rulekit state.
 argument-hint: [project-directory]
 allowed-tools:
   - Agent
+  - AskUserQuestion
   - Grep
   - Read
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/prepare.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/scan.py" *)'
 ---
 
-# Diagnose an existing project
+# Prepare an existing project for adoption
 
-This first version is read-only. Inspect an existing project, map what is there
-to the current Rulekit catalogue, print one short diagnostic report, and stop.
-Do not write any file or invoke a migration or review workflow.
+Inspect an existing project, map what is there to the current Rulekit catalogue,
+and ask the owner to confirm the inferred base. After confirmation, create a
+clean Rulekit preview and stop. Do not reconcile existing content, apply the
+preview, initialize repositories, or run postreview.
 
-The later interactive phase follows
+The later reconciliation phase follows
 [references/reconciliation.md](references/reconciliation.md). Do not load or
-apply that guidance during this diagnostic-only version.
+apply that guidance before the clean preview exists.
 
 Treat `$ARGUMENTS` as the target path. Use the current working directory when
 the argument is empty. Stop if the target does not exist or is not a directory.
@@ -52,9 +56,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" list
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" values
 ```
 
-Do not run any other shell command. Use the scanner output and read-only file
-tools for all remaining inspection; do not re-check facts the scanner already
-reported.
+During the diagnostic, do not run any other shell command. Use the scanner
+output and read-only file tools for all remaining inspection; do not re-check
+facts the scanner already reported. The confirmed prepare command described
+below is the only later shell command in this version.
 
 Use the resolved target printed by `scan.py` from then on. Stop when the scan or
 manifest check fails. The scanner reports repository candidates and files; it
@@ -105,7 +110,7 @@ Wait for the project reader after finishing the main analysis. Treat its report
 as evidence, not authority. Verify material claims against files already read;
 discard unsupported guesses silently.
 
-## Print the v0 diagnostic
+## Present the diagnostic
 
 Return one concise report directly in the invoking conversation. Do not write
 the report to a file or open it in a review UI. Use:
@@ -119,12 +124,50 @@ the report to a file or open it in a review UI. Use:
    Rulekit state paths exist or are missing
 6. `Findings` - at most five uncovered rules, conflicts, or material
    uncertainties, each with concise file evidence
-7. `Next decisions` - the questions a later interactive version must ask, or
-   `None`
+7. `Next decisions` - unresolved questions that must be answered before the
+   base mapping can be confirmed, or `None`
 
 Do not include the full scanner inventory, a list of every file read, rejected
 reader guesses, or a migration plan. Do not ask the listed questions in this
-version.
+report.
 
-End by stating whether the project appears ready for those decisions. State
-explicitly that no files were changed and no migration preview was created.
+State whether the project appears ready for those decisions. At this point no
+files have changed and no migration preview exists.
+
+## Confirm the base mapping
+
+Resolve every `Next decisions` item with the owner, one question at a time. Then
+show one compact confirmation containing:
+
+- concise English project context for the generated `PROJECT.md`
+- selected modules, including automatic required modules
+- every value
+- every inner repository path and concise English purpose
+
+Use `AskUserQuestion` for one confirmation. The owner may correct any part;
+revise and show the complete mapping again until explicitly accepted. Do not
+treat evidence labels or a high-confidence inference as approval.
+
+## Prepare the clean preview
+
+After confirmation, run `prepare.py` once. Pass the accepted context as one
+shell-quoted `--context` argument, repeat `--module` for every module,
+`--value <key> <value>` for every value, and `--repo <path> <purpose>` for every
+inner repository:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/prepare.py" \
+  --target "<resolved-target>" \
+  --context "<confirmed-context>" \
+  --module "<module>" \
+  --value "<key>" "<value>" \
+  --repo "<path>" "<purpose>"
+```
+
+Add repeated arguments directly to the same command. Do not write a temporary
+specification file or construct the preview by hand. Stop if the script
+refuses: its checks protect an existing project and preview from replacement.
+
+Report the prepared path and the script's warning, if any. State explicitly
+that existing project files were not changed. Stop before reconciliation; it is
+not implemented in this version.
