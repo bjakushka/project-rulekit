@@ -136,10 +136,19 @@ Wait for the project reader after finishing the main analysis. Treat its report
 as evidence, not authority. Verify material claims against files already read;
 discard unsupported guesses silently.
 
+If the scanner reports no nested Git repositories, do not leave the repository
+mapping empty or treat `.` as an inner repository. A Rulekit project requires at
+least one inner repository. Add a blocking `Next decisions` question for the
+intended relative path and concise English purpose of the first inner
+repository. Make clear that this is the future layout for the clean preview,
+not a claim about the current project.
+
 ## Present the diagnostic
 
 Return one concise report directly in the invoking conversation. Do not write
-the report to a file or open it in a review UI. Use:
+the report to a file, open it in a review UI, or ask the owner where to show it.
+Keeping the report in chat lets the skill continue to the decisions and preview
+without ending its current run. Use:
 
 1. `Scope` - target, read-only mode, scanner warnings or truncation
 2. `Project` - a two- or three-sentence verified summary
@@ -163,12 +172,16 @@ before adoption is not by itself a finding. This includes `.kit.json`, `rules/`,
 generated imports, and optional scaffold files.
 
 State whether the project appears ready for those decisions. At this point no
-files have changed and no migration preview exists.
+files have changed and no migration preview exists. When `Next decisions` is
+not `None`, immediately call `AskUserQuestion` for the first decision in the
+same turn. Do not ask the question as ordinary chat or end after the
+diagnostic: `AskUserQuestion` pauses for the owner's answer and then returns
+control to the same skill run.
 
 ## Confirm the base mapping
 
-Resolve every `Next decisions` item with the owner, one question at a time. Then
-show one compact confirmation containing:
+Resolve every `Next decisions` item with the owner through `AskUserQuestion`,
+one question at a time. Then show one compact confirmation containing:
 
 - concise English project context for the generated `PROJECT.md`
 - selected modules, including automatic required modules
