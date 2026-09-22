@@ -12,6 +12,9 @@ the copies had drifted, and no two of them said the same thing.
 This is the fix: the rules live in one place as modules, a project picks
 the ones it needs, and a manifest records what it took.
 
+**Rulekit is opinionated and built for the author's own workflow, not as a
+universal project system.**
+
 ## Why the rules are copied
 
 A project gets its own copy of each rule file, and `CLAUDE.md` imports it
@@ -48,13 +51,14 @@ Two skills are available:
   is, prepares every file in a preview, shows it, and writes nothing until
   you approve. After that it reviews the result with you
 - `rulekit:adopt <directory>` - look at a project that already exists and
-  report how it maps to the modules. It reads only, and changes nothing
+  build a clean preview, then reconcile material differences with you. It
+  leaves the existing project unchanged
 
 ## Status
 
-Early, but `new` works end to end. `adopt` only reports for now; it does not
-migrate a project yet. Keeping a project in sync with the kit after it is
-created is still to come.
+Early, but `new` works end to end. `adopt` prepares and reconciles a migration
+preview, but does not apply it yet. Keeping a project in sync with the kit after
+it is created is still to come.
 
 ## License
 
