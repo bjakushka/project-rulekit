@@ -35,7 +35,7 @@ The usual choices are:
 
 - remove a covered duplicate from the preview
 - preserve project-specific behavior outside managed Rulekit files
-- propose portable behavior for Rulekit intake
+- add portable behavior to the copied Rulekit module in the preview
 - choose which side of a real conflict should govern the adopted project
 
 The owner decides unresolved and conflicting cases because project knowledge
@@ -45,6 +45,12 @@ deletions.
 
 Apply accepted decisions to the preview only. Keep unresolved items open, and
 record moves or deletions separately for later approval.
+
+When the owner decides that behavior belongs in Rulekit generally, edit the
+copied module under `.kit-preview/files/rules/`. Do not edit the active Rulekit
+catalogue during adoption. The project's `.kit.json` keeps the source Rulekit
+commit, so a future sync can show this local module change and offer it back to
+Rulekit.
 
 ## Collect the checklist
 
@@ -123,6 +129,9 @@ empty: the preview may already match the accepted policy, and some decisions
 need no later source change. Keep the note short and explain why the owner chose
 the outcome, not the whole conversation.
 
+When the accepted outcome depends on an exact copy, entry count, or unchanged
+text, verify it with a deterministic comparison before completing the item.
+
 Continue with `item next`. When no open items remain, check whether the work
 revealed another material difference and append it if needed.
 
@@ -136,7 +145,16 @@ Start `rulekit:adopt-reconciliation-reviewer`. Give it the resolved target,
 finished preview, exact reconciliation script path, and completed-item report.
 Wait without asking side questions. If it registers omissions, return to
 `item next`; after resolving them, run the reviewer again. Only a pass with no
-unexplained material omissions permits completion:
+unexplained material omissions or preview rule violations may proceed.
+
+After a clean reviewer pass, ask whether the owner wants to review the finished
+preview. Do not require a particular review tool; use what is available in the
+current environment. If the owner declines, continue. If the review finds a
+material difference or rule violation, add it as a reconciliation item, resolve
+it, and run the reviewer again.
+
+Only after the owner declines or finishes that review with no unresolved
+remarks, complete reconciliation:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" state complete

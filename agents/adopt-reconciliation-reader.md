@@ -37,6 +37,11 @@ with the generated core and imports, including rules with opposite behavior.
 Preserve Unicode and diacritics exactly. Use verified diagnostic findings as a
 minimum, not a limit.
 
+Also register a generated Rulekit rule with no source counterpart when it has a
+concrete effect on the existing project: it requires content cleanup, changes
+the proposed layout, or materially changes the owner's future workflow. Do not
+register every baseline Rulekit rule merely because it is new to the project.
+
 Compare behavior, not lines. Omit:
 
 - wording, wrapping, and ordering drift
@@ -44,10 +49,11 @@ Compare behavior, not lines. Omit:
 - missing standard files already supplied by the preview
 - project-owned files or directories that carry no assistant behavior
 
-Register every material conflict, uncovered behavior, required move, or
-genuinely unclear mapping. Do not stop at a fixed number. One item represents
-one independently decidable outcome. Multiple files may support that outcome,
-but unrelated choices must be separate items.
+Register every material conflict, uncovered behavior, required move,
+consequential new Rulekit constraint, or genuinely unclear mapping. Do not stop
+at a fixed number. One item represents one independently decidable outcome.
+Multiple files may support that outcome, but unrelated choices must be separate
+items.
 
 For each finding, run this command once on one physical line:
 
