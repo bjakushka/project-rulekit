@@ -2,17 +2,21 @@
 name: adopt
 description: >-
   Diagnose how an existing project maps to Rulekit, confirm the base mapping,
-  and prepare a clean migration preview. Use when the owner invokes
-  rulekit:adopt for a project without Rulekit state.
+  prepare a clean migration preview, and reconcile it with the owner. Use when
+  the owner invokes rulekit:adopt for a project without Rulekit state or resumes
+  an existing adoption preview.
 argument-hint: [project-directory]
 allowed-tools:
   - Agent
   - AskUserQuestion
+  - Edit
   - Grep
   - Read
+  - Write
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/prepare.py" *)'
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/scan.py" *)'
 ---
 
@@ -20,10 +24,11 @@ allowed-tools:
 
 Inspect an existing project, map what is there to the current Rulekit catalogue,
 and ask the owner to confirm the inferred base. After confirmation, create a
-clean Rulekit preview and stop. Do not reconcile existing content, apply the
-preview, initialize repositories, or run postreview.
+clean Rulekit preview and reconcile existing behavior into it through explicit
+owner decisions. Do not apply the preview to the source project, initialize
+repositories, or run postreview.
 
-The later reconciliation phase follows
+The reconciliation phase follows
 [references/reconciliation.md](references/reconciliation.md). Do not load or
 apply that guidance before the clean preview exists.
 
@@ -63,10 +68,11 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" list
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" values
 ```
 
-During the diagnostic, do not run any other shell command. Use the scanner
+During a fresh diagnostic, do not run any other shell command. Use the scanner
 output and read-only file tools for all remaining inspection; do not re-check
 facts the scanner already reported. After confirmation, only the shared answers
-commands and prepare command described below are allowed.
+commands, prepare command, and reconciliation state commands described below
+are allowed.
 
 Use the resolved target printed by `scan.py` from then on. Stop when the scan or
 manifest check fails. The scanner reports repository candidates and files; it
@@ -74,6 +80,20 @@ does not establish that every nested Git root belongs to the project. When its
 root inventory is not truncated, trust it for standard-file existence.
 Rulekit state exists only at `<target>/.kit.json`; a nested manifest is not
 Rulekit state for the target.
+
+After the four deterministic commands, probe for a prepared adoption preview:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" state init
+```
+
+Run the invocation on one physical line. If it initializes or reports valid
+reconciliation state, this is a prepared or resumed adoption: skip the project
+reader, diagnostic, base confirmation, answers commands, and prepare command.
+Load the reconciliation reference and continue from the reported phase. If it
+refuses only because the clean preview is missing, continue the fresh
+diagnostic below. Stop for every other reconciliation-state error; do not
+replace or repair state by hand.
 
 ## Start the project reader
 
@@ -233,5 +253,12 @@ Do not construct the preview by hand. Stop if the script refuses: its checks
 protect the existing project, answers, and preview from replacement.
 
 Report the prepared path and the script's warning, if any. State explicitly
-that existing project files were not changed. Stop before reconciliation; it is
-not implemented in this version.
+that existing project files were not changed. Then initialize reconciliation:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" state init
+```
+
+Run it on one physical line, load the reconciliation reference, and continue in
+the same turn. The normal adoption finishes through one uninterrupted manual
+decision loop; persisted state exists only to make interruption safe.
