@@ -401,6 +401,20 @@ def file_map_block(draft):
     )
 
 
+def repository_contexts_block(repositories):
+    sections = []
+    for repository in repositories:
+        sections.extend(
+            (
+                f"## Repository `{repository['path']}/`",
+                "",
+                wrapped_prose(repository["purpose"]),
+                "",
+            )
+        )
+    return "\n".join(sections).rstrip()
+
+
 def render_project(template, draft, rendered_values):
     text = template.read_text(encoding="utf-8")
     if "VERSION_CONTROL" not in rendered_values:
@@ -415,6 +429,9 @@ def render_project(template, draft, rendered_values):
         "PROJECT_CONTEXT": project_context_block(draft["brief"]["context"]),
         "REPOSITORY_LAYOUT": repository_layout_block(
             rendered_values["VERSION_CONTROL"], draft["brief"]["repositories"]
+        ),
+        "REPOSITORY_CONTEXTS": repository_contexts_block(
+            draft["brief"]["repositories"]
         ),
     }
 

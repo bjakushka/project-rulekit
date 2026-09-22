@@ -71,8 +71,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" values
 During a fresh diagnostic, do not run any other shell command. Use the scanner
 output and read-only file tools for all remaining inspection; do not re-check
 facts the scanner already reported. After confirmation, only the shared answers
-commands, prepare command, and reconciliation state commands described below
-are allowed.
+commands, prepare command, and reconciliation commands are pre-approved. Any
+other shell command requires approval for its exact preview-only change and
+must not modify the source project.
 
 Use the resolved target printed by `scan.py` from then on. Stop when the scan or
 manifest check fails. The scanner reports repository candidates and files; it
@@ -118,9 +119,11 @@ reported project-context candidate. Read task-intake candidates and only files
 needed to understand the project or support a material inference. Accept the
 scanner's existence and repository-topology facts without re-checking them.
 
-Read the current Rulekit core template and the reported entry point of every
-available module. Use the manifest output as the catalogue; do not invent module
-names or guess whether a module is a file or directory.
+Read `${CLAUDE_PLUGIN_ROOT}/template/CLAUDE.md`,
+`${CLAUDE_PLUGIN_ROOT}/template/PROJECT.tmpl.md`, and the reported entry point of
+every available module. Use only paths returned by `manifest.py list`; follow
+imports from an entry point with `Read`. Do not enumerate the catalogue with
+`find`, `ls -R`, or similar commands.
 
 Limit semantic comparison to the target's outer instruction system. Do not read
 files inside nested repositories during the main analysis; use the project
@@ -178,8 +181,8 @@ without ending its current run. Use:
    separate selection and fit statuses, and label inferred type and values
 5. `Standard files` - which instruction, context, inbox/backlog, rules, and
    Rulekit state paths exist or are missing
-6. `Findings` - at most five uncovered rules, conflicts, or material
-   uncertainties, each with concise file evidence
+6. `Findings` - every uncovered rule, conflict, or material uncertainty, each
+   with concise file evidence
 7. `Next decisions` - unresolved questions that must be answered before the
    base mapping can be confirmed, or `None`
 
@@ -238,8 +241,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" --target "<resolved-target>" 
 Repeat `--repo` in the repositories command and repeat the value command for
 every confirmed value. Run every allowed Bash invocation on one physical line
 so it matches the skill's permission rule. Do not create or edit `answers.json`
-directly. Stop if a command refuses; correct the confirmed mapping with the
-owner and retry through the same command.
+directly. Copy confirmed text character for character, including Unicode and
+diacritics; do not rewrite it while constructing the command. Stop if a command
+refuses; correct the confirmed mapping with the owner and retry through the
+same command.
 
 ## Prepare the clean preview
 

@@ -12,3 +12,5 @@ Project facts and file map. Not LLM behavior rules (those live in CLAUDE.md).
 - `CLAUDE.md`, `PROJECT.md`, and `rules/` - Project instructions, facts,
   and behavior rules
 {{FILE_MAP}}
+
+{{REPOSITORY_CONTEXTS}}

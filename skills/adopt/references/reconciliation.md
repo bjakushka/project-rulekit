@@ -46,7 +46,7 @@ deletions.
 Apply accepted decisions to the preview only. Keep unresolved items open, and
 record moves or deletions separately for later approval.
 
-## Collect a small checklist
+## Collect the checklist
 
 Initialize reconciliation through the state script. The model must not read or
 edit `reconciliation.json` directly:
@@ -56,16 +56,16 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<res
 ```
 
 While the state is `collecting`, start `rulekit:adopt-reconciliation-reader`.
-Give it only the resolved target, `.kit-preview/files/`, the exact output path
-`.kit-preview/reconciliation-findings.md`, and a request to follow its own
-instructions. It writes every material difference there without choosing
-outcomes or returning the evidence into the main context.
+Give it only the resolved target, `.kit-preview/files/`, verified diagnostic
+findings, the exact `${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py`
+path, and a request to follow its own instructions. It registers every finding
+through `item add` without choosing outcomes or returning evidence into the
+main context.
 
-After it finishes, start `rulekit:adopt-reconciliation-registrar`. Give it only
-the resolved target, the findings path, the exact
-`${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py` path, and a request to
-follow its own instructions. It reads every block and registers it through
-`item add`; it never edits reconciliation state directly or chooses an outcome.
+Wait for the reader. A short progress update may say collection is still
+running, but do not ask a blocking question before the checklist is ready. An
+early question makes the owner decide from incomplete evidence and leaves the
+answer unrelated to a registered item.
 
 The initial collection does not seal the list. If the main skill discovers
 another material difference while discussing an item, verify it against the
@@ -78,7 +78,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<res
 Repeat `--source` and `--preview` as needed. A finding with no corresponding
 preview behavior may omit `--preview`.
 
-After registering the verified initial findings, enter the decision loop:
+After the reader finishes, enter the decision loop:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" state ready
@@ -104,6 +104,12 @@ informed decision:
 Then call `AskUserQuestion`. Do not decide from textual similarity or silently
 accept the recommendation. The owner's project knowledge governs the outcome.
 
+One item represents one independently decidable outcome, not necessarily one
+file. Never combine unrelated choices merely because they occur in the same
+file. When a decision would copy or change a group of files, list the exact
+paths and obtain explicit approval for that group first. Approval of the final
+layout is not approval of an inferred file list.
+
 After approval, apply that exact decision immediately and only under
 `.kit-preview/files/`. Read the changed preview paths to verify the result, then
 record the completed item:
@@ -118,7 +124,19 @@ need no later source change. Keep the note short and explain why the owner chose
 the outcome, not the whole conversation.
 
 Continue with `item next`. When no open items remain, check whether the work
-revealed another material difference and append it if needed. Otherwise finish:
+revealed another material difference and append it if needed.
+
+Before completing, print the accepted decisions without reading state directly:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" item list --status done
+```
+
+Start `rulekit:adopt-reconciliation-reviewer`. Give it the resolved target,
+finished preview, exact reconciliation script path, and completed-item report.
+Wait without asking side questions. If it registers omissions, return to
+`item next`; after resolving them, run the reviewer again. Only a pass with no
+unexplained material omissions permits completion:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" state complete
@@ -127,13 +145,17 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<res
 `complete` means that reconciliation is complete, not that the source project
 has been changed or the adoption transaction has been approved.
 
+Reconciliation records where content should end up, not how Git history will
+move. Do not record `git init`, copy or remove `.git`, or choose a history
+strategy unless the owner explicitly decides it during the future apply.
+
 ## Resume safely
 
 On a repeated adopt invocation, `state init` validates the existing state and
 reports its phase without resetting it:
 
-- `collecting`: rerun the collector and registrar; an identical `item add` is a
-  no-op, then run `state ready`
+- `collecting`: rerun the collector; an identical `item add` is a no-op, then
+  run `state ready`
 - `reconciling`: continue with `item next`
 - `complete`: report the finished preview and stop
 

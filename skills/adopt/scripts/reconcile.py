@@ -6,6 +6,7 @@ Commands:
     state ready     finish initial finding collection
     state complete  finish reconciliation when every item is done
     item add        append one verified material difference
+    item list       show items for a bounded review
     item next       show the first open item
     item done       record an applied owner decision
 
@@ -415,6 +416,38 @@ def print_item(item):
         print("- none")
 
 
+def cmd_item_list(raw_target, status):
+    _target, _preview, _files, state_path = workspace_paths(
+        raw_target, "list items"
+    )
+    state = load_state(state_path, "list items")
+    items = state["items"]
+    if status != "all":
+        items = [item for item in items if item["status"] == status]
+
+    print(f"phase: {state['phase']}")
+    print(f"items: {len(items)}")
+    for item in items:
+        print("---")
+        print_item(item)
+        print(f"status: {item['status']}")
+        if item["status"] == "done":
+            print(f"note: {item['note']}")
+            print("changed preview:")
+            if item["changed_preview"]:
+                for path in item["changed_preview"]:
+                    print(f"- {path}")
+            else:
+                print("- none")
+            print("source actions:")
+            if item["source_actions"]:
+                for action in item["source_actions"]:
+                    print(f"- {action}")
+            else:
+                print("- none")
+    return 0
+
+
 def cmd_item_next(raw_target):
     _target, _preview, _files, state_path = workspace_paths(
         raw_target, "read next item"
@@ -487,14 +520,25 @@ def cmd_item_done(raw_target, identifier, note, changed_preview, source_actions)
     normalized_changed = []
     for path in changed_preview:
         normalized, problem = answers.normalize_repository_path(path)
-        if problem or normalized != path:
+        if problem:
             return refuse(
                 state_path,
                 "complete item",
-                problem or f"changed preview path is not normalized: {path}",
+                problem,
                 "provide preview-relative paths using `/`",
             )
         normalized_changed.append(normalized)
+
+    duplicate = text_list_problem(
+        normalized_changed, "changed_preview", True
+    )
+    if duplicate:
+        return refuse(
+            state_path,
+            "complete item",
+            duplicate,
+            "remove duplicate changed preview paths and retry",
+        )
 
     outcome = {
         "note": note,
@@ -546,6 +590,15 @@ def build_parser():
         "--source", action="append", required=True, help="source reference"
     )
     add.add_argument("--preview", action="append", default=[], help="preview reference")
+    item_list = item_commands.add_parser(
+        "list", help="show items without reading reconciliation JSON directly"
+    )
+    item_list.add_argument(
+        "--status",
+        choices=("all", "open", "done"),
+        default="all",
+        help="filter items by status",
+    )
     item_commands.add_parser("next", help="show the first open item")
     done = item_commands.add_parser("done", help="record an applied owner decision")
     done.add_argument("id", help="item id returned by `item next`")
@@ -585,6 +638,8 @@ def main():
             )
         if args.item_action == "next":
             return cmd_item_next(args.target)
+        if args.item_action == "list":
+            return cmd_item_list(args.target, args.status)
         return cmd_item_done(
             args.target,
             args.id,
