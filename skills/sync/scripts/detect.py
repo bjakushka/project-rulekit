@@ -52,9 +52,9 @@ def read_json(path, subject):
         raise SyncError(f"could not read {subject} at {path}: {error}") from error
 
 
-def run_git(*arguments, text=False):
+def run_git_at(root, *arguments, text=False):
     result = subprocess.run(
-        ["git", "-C", str(KIT), *arguments],
+        ["git", "-C", str(root), *arguments],
         capture_output=True,
         check=False,
         text=text,
@@ -63,6 +63,33 @@ def run_git(*arguments, text=False):
         detail = result.stderr.strip() if text else result.stderr.decode().strip()
         raise SyncError(detail or f"git {' '.join(arguments)} failed")
     return result.stdout
+
+
+def run_git(*arguments, text=False):
+    return run_git_at(KIT, *arguments, text=text)
+
+
+def require_clean_repository(root, subject):
+    root = root.resolve()
+    top_level = Path(
+        run_git_at(root, "rev-parse", "--show-toplevel", text=True).strip()
+    ).resolve()
+    if top_level != root:
+        raise SyncError(f"{subject} is not a Git repository root: {root}")
+
+    output = run_git_at(
+        root,
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        text=True,
+    ).strip()
+    if output:
+        changes = output.splitlines()
+        summary = "; ".join(changes[:5])
+        if len(changes) > 5:
+            summary += f"; and {len(changes) - 5} more"
+        raise SyncError(f"{subject} repository has uncommitted changes: {summary}")
 
 
 def load_state(raw_target):
@@ -202,10 +229,21 @@ def comparisons(raw_target):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True, help="adopted project directory")
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="allow approved changes while rechecking the current sync run",
+    )
     args = parser.parse_args()
 
     try:
-        state, found = comparisons(args.target)
+        state = load_state(args.target)
+        if not args.allow_dirty:
+            require_clean_repository(KIT, "Rulekit")
+            require_clean_repository(state.target, "target")
+        found = tuple(
+            compare_module(state, module) for module in state.modules
+        )
     except (OSError, SyncError, UnicodeError, json.JSONDecodeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

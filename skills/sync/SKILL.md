@@ -33,6 +33,11 @@ Run this command on one physical line:
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/detect.py" --target "<target>"
 ```
 
+This initial invocation requires clean Git working trees at both
+`${CLAUDE_PLUGIN_ROOT}` and the target root. If either repository has tracked or
+untracked changes, report the refusal and stop until the owner commits or
+reverts them. Do not use `--allow-dirty` for the initial invocation.
+
 The script compares three byte-exact module snapshots:
 
 - `baseline`: the Rulekit commit recorded in `.kit.json`
@@ -87,10 +92,17 @@ state is byte-identical module content in the project and current Rulekit. A
 generalized merge therefore replaces the local wording in the project as well
 as updating Rulekit.
 
-Apply each accepted decision immediately, then run `detect.py` again. A module
-is resolved for this run when it is `unchanged` or `converged`. Continue with
-the remaining reported modules. If the owner keeps a project-local difference,
-leave it unresolved and say that future sync runs will report it again.
+Apply each accepted decision immediately, then recheck on one physical line:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/detect.py" --target "<target>" --allow-dirty
+```
+
+The flag is only for rechecking changes approved and applied during this sync
+run; never use it to bypass an initial cleanliness refusal. A module is resolved
+for this run when it is `unchanged` or `converged`. Continue with the remaining
+reported modules. If the owner keeps a project-local difference, leave it
+unresolved and say that future sync runs will report it again.
 
 Do not change module selection, sync core or scaffold files, edit `.kit.json`
 by hand, or commit either repository.
