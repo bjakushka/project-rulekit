@@ -5,5 +5,8 @@
   all - not in tracked files, not in gitignored ones
 - Keep them in a secrets manager and reference them by name when you must 
   mention them
-- Masked references are fine in tracked notes when they help connect context: 
-  first and last octets, serial tails, token tails
+- Private RFC1918 addresses and masked references to public IPs, serials, and
+  similar values may appear openly in tracked notes
+- Do not combine otherwise allowed details into a complete connection recipe.
+  A tracked file must not contain enough information to initiate access without
+  consulting the secrets manager
