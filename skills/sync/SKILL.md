@@ -11,6 +11,7 @@ allowed-tools:
   - Read
   - Write
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/detect.py" *)'
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/finalize.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/show.py" *)'
 ---
 
@@ -91,10 +92,8 @@ is resolved for this run when it is `unchanged` or `converged`. Continue with
 the remaining reported modules. If the owner keeps a project-local difference,
 leave it unresolved and say that future sync runs will report it again.
 
-Do not update `.kit.json`, change module selection, sync core or scaffold files,
-or commit either repository. The stored baseline can advance only after the
-owner commits the accepted Rulekit changes; that is outside this version of the
-skill.
+Do not change module selection, sync core or scaffold files, edit `.kit.json`
+by hand, or commit either repository.
 
 When only `unchanged` or `converged` modules remain, report the changed files.
 If this run changed Rulekit files, name `${CLAUDE_PLUGIN_ROOT}` as the repository
@@ -103,5 +102,20 @@ the commit is complete. If this run changed only project files, do not request
 an unrelated Rulekit commit.
 
 Do not say that committing Rulekit moves the stored baseline. After the owner
-confirms the commit, explain that `.kit.json` remains unchanged in this version
-of the skill. A new Rulekit commit only makes a later baseline update possible.
+confirms the commit, or immediately when this run did not change Rulekit files,
+run this command on one physical line:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/finalize.py" --target "<target>"
+```
+
+The finalizer must verify that every selected project module matches current
+Rulekit and that the same Rulekit bytes are committed in `HEAD`. If it refuses,
+report the reason and stop; do not edit `.kit.json` or substitute a commit by
+hand.
+
+When the finalizer advances `.kit.json`, report that file as changed and use
+`AskUserQuestion` to wait for confirmation that the owner committed the target
+project repository. The sync is complete only after that confirmation. If the
+finalizer reports that the baseline was already current, no state commit is
+needed.
