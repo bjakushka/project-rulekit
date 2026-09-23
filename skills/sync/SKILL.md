@@ -59,9 +59,13 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/show.py" --target "<target>" 
 ```
 
 The script shows baseline-to-project, baseline-to-kit, and current-kit-to-project
-diffs. Explain the material difference in plain language, then ask the owner
-what the shared rule should say. Use `AskUserQuestion` and resolve one module at
-a time.
+diffs and the physical project and Rulekit paths for every module file. Use
+those reported paths; do not run shell commands to locate the files or copy
+them merely to prepare the comparison.
+
+Explain the material difference in plain language, then ask the owner what the
+shared rule should say. Use exactly one question in each `AskUserQuestion`
+call. Resolve one module at a time.
 
 Use these defaults as recommendations, never as automatic choices:
 
@@ -91,3 +95,13 @@ Do not update `.kit.json`, change module selection, sync core or scaffold files,
 or commit either repository. The stored baseline can advance only after the
 owner commits the accepted Rulekit changes; that is outside this version of the
 skill.
+
+When only `unchanged` or `converged` modules remain, report the changed files.
+If this run changed Rulekit files, name `${CLAUDE_PLUGIN_ROOT}` as the repository
+the owner must commit and use `AskUserQuestion` to wait for confirmation that
+the commit is complete. If this run changed only project files, do not request
+an unrelated Rulekit commit.
+
+Do not say that committing Rulekit moves the stored baseline. After the owner
+confirms the commit, explain that `.kit.json` remains unchanged in this version
+of the skill. A new Rulekit commit only makes a later baseline update possible.

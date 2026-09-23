@@ -82,6 +82,14 @@ def main():
 
     print(f"Module: `{comparison.module}`")
     print(f"Status: `{comparison.status}`")
+    print("\nFiles:")
+    logical_paths = sorted(
+        set(comparison.baseline) | set(comparison.project) | set(comparison.kit)
+    )
+    for path in logical_paths:
+        print(f"- `{path}`")
+        print(f"  - project: `{state.target / path}`")
+        print(f"  - kit: `{detect.KIT / 'template' / path}`")
     for heading, content in sections:
         print(f"\n## {heading}\n")
         print(content)
