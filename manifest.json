@@ -8,7 +8,7 @@
       "group": null,
       "load": "always",
       "required": false,
-      "scaffold": ["backlog.tmpl.md"],
+      "scaffold": ["backlog/example-task.tmpl.md"],
       "skills": []
     },
     "inbox": {
