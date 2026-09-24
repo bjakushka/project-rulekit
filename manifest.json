@@ -25,6 +25,13 @@
       "scaffold": [],
       "skills": []
     },
+    "notes": {
+      "group": null,
+      "load": "always",
+      "required": false,
+      "scaffold": ["notes/example-note.tmpl.md"],
+      "skills": []
+    },
     "project-context": {
       "group": null,
       "load": "always",
