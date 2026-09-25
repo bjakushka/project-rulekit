@@ -5,6 +5,7 @@ Commands:
     state init      create or inspect reconciliation state
     state ready     finish initial finding collection
     state complete  finish reconciliation when every item is done
+    review pass     record a clean review of the current items and preview
     item add        append one verified material difference
     item list       show items for a bounded review
     item next       show the first open item
@@ -20,6 +21,7 @@ Exit codes:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -49,6 +51,7 @@ STATE_FILENAME = "reconciliation.json"
 VERSION = 1
 PHASES = ("collecting", "reconciling", "complete")
 ITEM_STATUSES = ("open", "done")
+FINGERPRINT_PATTERN = re.compile(r"[0-9a-f]{64}")
 ITEM_KEYS = {
     "changed_preview",
     "id",
@@ -125,14 +128,30 @@ def text_list_problem(values, field, allow_empty):
 
 
 def validate_state(state):
-    if not isinstance(state, dict) or set(state) != {"version", "phase", "items"}:
-        return "the document must contain exactly `version`, `phase`, and `items`"
+    required_keys = {"version", "phase", "items"}
+    allowed_keys = required_keys | {"review"}
+    if not isinstance(state, dict) or not required_keys.issubset(state):
+        return "the document must contain `version`, `phase`, and `items`"
+    if not set(state).issubset(allowed_keys):
+        return "the document contains unknown top-level fields"
     if state["version"] != VERSION:
         return f"unsupported reconciliation state version: {state['version']}"
     if state["phase"] not in PHASES:
         return f"unknown reconciliation phase: {state['phase']}"
     if not isinstance(state["items"], list):
         return "`items` must be a JSON array"
+
+    review = state.get("review")
+    if review is not None:
+        if not isinstance(review, dict) or set(review) != {
+            "items_fingerprint",
+            "preview_fingerprint",
+        }:
+            return "`review` must contain item and preview fingerprints"
+        for field in ("items_fingerprint", "preview_fingerprint"):
+            value = review[field]
+            if not isinstance(value, str) or FINGERPRINT_PATTERN.fullmatch(value) is None:
+                return f"`review.{field}` must be a SHA-256 fingerprint"
 
     identifiers = set()
     for item in state["items"]:
@@ -215,6 +234,56 @@ def state_counts(state):
     return open_count, len(state["items"]) - open_count
 
 
+def json_fingerprint(value):
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def preview_fingerprint(files, state_path, operation):
+    entries = []
+    try:
+        paths = sorted(files.rglob("*"), key=lambda path: path.relative_to(files).as_posix())
+        for path in paths:
+            relative = path.relative_to(files).as_posix()
+            if path.is_symlink():
+                entries.append([relative, "symlink", os.readlink(path)])
+            elif path.is_dir():
+                entries.append([relative, "directory", None])
+            elif path.is_file():
+                entries.append(
+                    [relative, "file", hashlib.sha256(path.read_bytes()).hexdigest()]
+                )
+            else:
+                return refuse(
+                    state_path,
+                    operation,
+                    f"the preview contains an unsupported path type: {relative}",
+                    "replace it with a regular file, directory, or symlink",
+                )
+    except OSError as error:
+        return refuse(
+            state_path,
+            operation,
+            f"failed to fingerprint the preview: {error}",
+            "make the preview readable and retry",
+        )
+    return json_fingerprint(entries)
+
+
+def review_fingerprints(files, state, state_path, operation):
+    return {
+        "items_fingerprint": json_fingerprint(state["items"]),
+        "preview_fingerprint": preview_fingerprint(
+            files, state_path, operation
+        ),
+    }
+
+
 def report_state(state_path, state, result):
     open_count, done_count = state_counts(state)
     next_step = {
@@ -253,7 +322,12 @@ def cmd_state_init(raw_target):
         report_state(state_path, state, "reconciliation state already exists")
         return 0
 
-    state = {"version": VERSION, "phase": "collecting", "items": []}
+    state = {
+        "version": VERSION,
+        "phase": "collecting",
+        "items": [],
+        "review": None,
+    }
     try:
         descriptor = os.open(state_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
@@ -297,7 +371,7 @@ def cmd_state_ready(raw_target):
 
 
 def cmd_state_complete(raw_target):
-    _target, _preview, _files, state_path = workspace_paths(raw_target, "complete")
+    _target, _preview, files, state_path = workspace_paths(raw_target, "complete")
     state = load_state(state_path, "complete")
     if state["phase"] == "complete":
         report_state(state_path, state, "reconciliation is already complete")
@@ -317,9 +391,70 @@ def cmd_state_complete(raw_target):
             f"open items remain: {', '.join(open_items)}",
             "resolve every open item through the owner before completing",
         )
+    review = state.get("review")
+    if review is None:
+        return refuse(
+            state_path,
+            "complete",
+            "a clean final reviewer pass is not recorded",
+            "run the final reconciliation reviewer against the current preview",
+        )
+    current_review = review_fingerprints(files, state, state_path, "verify review")
+    if review["items_fingerprint"] != current_review["items_fingerprint"]:
+        return refuse(
+            state_path,
+            "complete",
+            "reconciliation decisions changed after the recorded reviewer pass",
+            "run the final reconciliation reviewer again",
+        )
+    if review["preview_fingerprint"] != current_review["preview_fingerprint"]:
+        return refuse(
+            state_path,
+            "complete",
+            "the preview changed after the recorded reviewer pass",
+            "run the final reconciliation reviewer again",
+        )
     state["phase"] = "complete"
     save_state(state_path, state, "complete")
     report_state(state_path, state, "completed reconciliation")
+    return 0
+
+
+def cmd_review_pass(raw_target):
+    _target, _preview, files, state_path = workspace_paths(
+        raw_target, "record review pass"
+    )
+    state = load_state(state_path, "record review pass")
+    if state["phase"] != "reconciling":
+        return refuse(
+            state_path,
+            "record review pass",
+            f"a review pass can be recorded only while reconciling, not {state['phase']}",
+            "finish initial collection and resolve every item first",
+        )
+    open_items = [item["id"] for item in state["items"] if item["status"] == "open"]
+    if open_items:
+        return refuse(
+            state_path,
+            "record review pass",
+            f"open items remain: {', '.join(open_items)}",
+            "resolve every open item through the owner before final review",
+        )
+    review = review_fingerprints(files, state, state_path, "record review pass")
+    if state.get("review") == review:
+        report(
+            f"clean reviewer pass is already recorded: {state_path}",
+            "the reconciliation items and preview fingerprints still match",
+            "offer the finished preview for owner review",
+        )
+        return 0
+    state["review"] = review
+    save_state(state_path, state, "record review pass")
+    report(
+        f"recorded clean reviewer pass: {state_path}",
+        "bound the pass to the current reconciliation items and preview contents",
+        "offer the finished preview for owner review",
+    )
     return 0
 
 
@@ -393,6 +528,7 @@ def cmd_item_add(raw_target, identifier, summary, source, preview_refs):
         )
 
     state["items"].append(candidate)
+    state["review"] = None
     save_state(state_path, state, "add item")
     report(
         f"added reconciliation item: {identifier}",
@@ -465,7 +601,7 @@ def cmd_item_next(raw_target):
         next_step = (
             "review the finished preview"
             if state["phase"] == "complete"
-            else "run `state complete` after checking for newly discovered items"
+            else "run the final reviewer before `state complete`"
         )
         report(
             "no open reconciliation items",
@@ -562,6 +698,7 @@ def cmd_item_done(raw_target, identifier, note, changed_preview, source_actions)
 
     item.update(outcome)
     item["status"] = "done"
+    state["review"] = None
     save_state(state_path, state, "complete item")
     report(
         f"completed reconciliation item: {identifier}",
@@ -580,6 +717,9 @@ def build_parser():
 
     state = commands.add_parser("state", help="move the reconciliation lifecycle")
     state.add_argument("action", choices=("init", "ready", "complete"))
+
+    review = commands.add_parser("review", help="record final review results")
+    review.add_argument("action", choices=("pass",))
 
     item = commands.add_parser("item", help="manage reconciliation checklist items")
     item_commands = item.add_subparsers(dest="item_action", required=True)
@@ -628,6 +768,8 @@ def main():
                 "ready": cmd_state_ready,
                 "complete": cmd_state_complete,
             }[args.action](args.target)
+        if args.command == "review":
+            return cmd_review_pass(args.target)
         if args.item_action == "add":
             return cmd_item_add(
                 args.target,
