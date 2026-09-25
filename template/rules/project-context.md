@@ -24,7 +24,9 @@
   orientation; omit temporary and low-level implementation details
 - Do not require `CODEBASE.md`, `ORIENTATION.md`, or another universal map file
 - Do not turn `PROJECT.md` into a README, backlog, or status log
-- Keep behavior rules in rule modules, not in `PROJECT.md`
+- Reusable behavior belongs in modules, while stable project-specific
+  contracts and instructions may remain in `PROJECT.md` after the standard
+  context and repository sections
 
 Use this shape for each inner repository:
 
