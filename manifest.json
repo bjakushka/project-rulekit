@@ -32,6 +32,13 @@
       "scaffold": ["notes/example-note.tmpl.md"],
       "skills": []
     },
+    "plans": {
+      "group": null,
+      "load": "always",
+      "required": false,
+      "scaffold": ["plans/19850913-rescue-princess.tmpl.md"],
+      "skills": []
+    },
     "project-context": {
       "group": null,
       "load": "always",
