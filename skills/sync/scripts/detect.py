@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare selected project modules with their baseline and current Rulekit."""
+"""Compare rendered core rules and selected modules with current Rulekit."""
 
 import argparse
 import json
@@ -24,6 +24,10 @@ def find_kit_root(start):
 
 
 KIT = find_kit_root(Path(__file__).resolve().parent)
+sys.path.insert(0, str(KIT / "scripts"))
+sys.dont_write_bytecode = True
+
+import render as project_render
 
 
 @dataclass(frozen=True)
@@ -31,11 +35,13 @@ class SyncState:
     target: Path
     baseline_commit: str
     modules: tuple[str, ...]
+    values: dict[str, str]
 
 
 @dataclass(frozen=True)
 class Comparison:
-    module: str
+    kind: str
+    name: str
     status: str
     baseline: dict[str, bytes]
     project: dict[str, bytes]
@@ -107,6 +113,7 @@ def load_state(raw_target):
     kit = state.get("kit")
     commit = kit.get("commit") if isinstance(kit, dict) else None
     modules = state.get("modules")
+    values = state.get("values")
     if not isinstance(commit, str) or not commit.strip():
         raise SyncError("Rulekit state has no valid `kit.commit`")
     if (
@@ -116,6 +123,17 @@ def load_state(raw_target):
         or len(modules) != len(set(modules))
     ):
         raise SyncError("Rulekit state has no valid selected module list")
+    if (
+        not isinstance(values, dict)
+        or not all(
+            isinstance(key, str)
+            and key
+            and isinstance(value, str)
+            and value
+            for key, value in values.items()
+        )
+    ):
+        raise SyncError("Rulekit state has no valid value map")
 
     run_git("cat-file", "-e", f"{commit}^{{commit}}")
     current_manifest = read_json(KIT / "manifest.json", "current manifest")
@@ -135,7 +153,14 @@ def load_state(raw_target):
             + ", ".join(unavailable)
         )
 
-    return SyncState(target, commit, tuple(sorted(modules)))
+    return SyncState(target, commit, tuple(sorted(modules)), values)
+
+
+def manifest_from_git(commit):
+    try:
+        return json.loads(run_git("show", f"{commit}:manifest.json", text=True))
+    except json.JSONDecodeError as error:
+        raise SyncError(f"baseline manifest is invalid JSON: {error}") from error
 
 
 def module_paths_from_git(commit, module):
@@ -163,6 +188,30 @@ def module_paths_from_git(commit, module):
     if not paths:
         raise SyncError(f"baseline module has no rule files: {module}")
     return paths
+
+
+def module_entry_points_from_git(commit, modules):
+    entry_points = {}
+    for module in modules:
+        paths = module_paths_from_git(commit, module)
+        single = f"template/rules/{module}.md"
+        index = f"template/rules/{module}/INDEX.md"
+        if single in paths:
+            entry_points[module] = Path("rules") / f"{module}.md"
+        elif index in paths:
+            entry_points[module] = Path("rules") / module / "INDEX.md"
+        else:
+            raise SyncError(
+                f"baseline composite module has no INDEX.md: {module}"
+            )
+    return entry_points
+
+
+def current_module_entry_points(modules):
+    return {
+        module: project_render.module_entry_point(KIT, module)
+        for module in modules
+    }
 
 
 def baseline_snapshot(commit, module):
@@ -218,12 +267,128 @@ def compare_module(state, module):
         state.target, module, "project", allow_missing=True
     )
     kit = filesystem_snapshot(KIT / "template", module, "current kit")
-    return Comparison(module, classify(baseline, project, kit), baseline, project, kit)
+    return Comparison(
+        "module",
+        module,
+        classify(baseline, project, kit),
+        baseline,
+        project,
+        kit,
+    )
+
+
+def core_rule_names(manifest, subject):
+    core = manifest.get("core")
+    rules = core.get("rules") if isinstance(core, dict) else None
+    if (
+        not isinstance(rules, list)
+        or not rules
+        or not all(isinstance(rule, str) and rule for rule in rules)
+        or len(rules) != len(set(rules))
+    ):
+        raise SyncError(f"{subject} has no valid core rule list")
+    unsupported = sorted(set(rules) - {"CLAUDE.md"})
+    if unsupported:
+        raise SyncError(
+            f"{subject} declares unsupported core rules: "
+            + ", ".join(unsupported)
+        )
+    return tuple(sorted(rules))
+
+
+def rendered_core_snapshot(
+    template,
+    manifest,
+    state,
+    entry_points,
+    subject,
+):
+    rules = core_rule_names(manifest, subject)
+    try:
+        claude, _values = project_render.render_claude_text(
+            template,
+            state.modules,
+            state.values,
+            manifest.get("modules", {}),
+            manifest.get("values", {}),
+            entry_points,
+        )
+    except (KeyError, project_render.ProjectError) as error:
+        detail = (
+            error.reason
+            if isinstance(error, project_render.ProjectError)
+            else error
+        )
+        raise SyncError(f"could not render {subject} core: {detail}") from error
+    return {"CLAUDE.md": claude.encode("utf-8")} if "CLAUDE.md" in rules else {}
+
+
+def baseline_core_snapshot(state, commit=None):
+    commit = state.baseline_commit if commit is None else commit
+    manifest = manifest_from_git(commit)
+    try:
+        template = run_git(
+            "show",
+            f"{commit}:template/CLAUDE.md",
+        ).decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise SyncError("baseline core template is not UTF-8 text") from error
+    return rendered_core_snapshot(
+        template,
+        manifest,
+        state,
+        module_entry_points_from_git(commit, state.modules),
+        "baseline manifest",
+    )
+
+
+def current_core_snapshot(state):
+    manifest = read_json(KIT / "manifest.json", "current manifest")
+    try:
+        template = (KIT / "template" / "CLAUDE.md").read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise SyncError("current core template is not UTF-8 text") from error
+    return rendered_core_snapshot(
+        template,
+        manifest,
+        state,
+        current_module_entry_points(state.modules),
+        "current manifest",
+    )
+
+
+def project_core_snapshot(state, rule_names):
+    snapshot = {}
+    for name in rule_names:
+        path = state.target / name
+        if path.is_symlink():
+            raise SyncError(f"project core rule must not be a symlink: {name}")
+        if path.is_file():
+            snapshot[name] = path.read_bytes()
+    return snapshot
+
+
+def compare_core(state):
+    baseline = baseline_core_snapshot(state)
+    kit = current_core_snapshot(state)
+    project = project_core_snapshot(state, sorted(set(baseline) | set(kit)))
+    return Comparison(
+        "core",
+        "rendered-core",
+        classify(baseline, project, kit),
+        baseline,
+        project,
+        kit,
+    )
 
 
 def comparisons(raw_target):
     state = load_state(raw_target)
-    return state, tuple(compare_module(state, module) for module in state.modules)
+    return (
+        state,
+        compare_core(state),
+        tuple(compare_module(state, module) for module in state.modules),
+    )
 
 
 def main():
@@ -241,23 +406,36 @@ def main():
         if not args.allow_dirty:
             require_clean_repository(KIT, "Rulekit")
             require_clean_repository(state.target, "target")
-        found = tuple(
+        core = compare_core(state)
+        modules = tuple(
             compare_module(state, module) for module in state.modules
         )
-    except (OSError, SyncError, UnicodeError, json.JSONDecodeError) as error:
+    except (
+        OSError,
+        SyncError,
+        UnicodeError,
+        json.JSONDecodeError,
+        project_render.ProjectError,
+    ) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
-    changed = [comparison for comparison in found if comparison.status != "unchanged"]
+    changed_modules = [
+        comparison for comparison in modules if comparison.status != "unchanged"
+    ]
     print(f"Target: `{state.target}`")
     print(f"Baseline: `{state.baseline_commit}`")
-    if not changed:
-        print("\nAll selected modules are unchanged.")
+    if core.status == "unchanged" and not changed_modules:
+        print("\nRendered core rules and all selected modules are unchanged.")
         return 0
 
-    print("\nChanged modules:")
-    for comparison in changed:
-        print(f"- `{comparison.module}` - {comparison.status}")
+    if core.status != "unchanged":
+        print("\nChanged core:")
+        print(f"- `rendered-core` - {core.status}")
+    if changed_modules:
+        print("\nChanged modules:")
+        for comparison in changed_modules:
+            print(f"- `{comparison.name}` - {comparison.status}")
     return 0
 
 

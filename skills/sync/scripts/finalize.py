@@ -54,33 +54,40 @@ def finalize(raw_target):
     comparisons = [
         detect.compare_module(state, module) for module in state.modules
     ]
+    core = detect.compare_core(state)
     unmatched = [
-        comparison.module
+        comparison.name
         for comparison in comparisons
         if comparison.project != comparison.kit
     ]
+    if core.project != core.kit:
+        unmatched.insert(0, "rendered-core")
     if unmatched:
         raise detect.SyncError(
-            "project and Rulekit modules still differ: " + ", ".join(unmatched)
+            "project and Rulekit content still differs: " + ", ".join(unmatched)
         )
 
     uncommitted = [
-        comparison.module
+        comparison.name
         for comparison in comparisons
         if comparison.kit
-        != detect.baseline_snapshot(head, comparison.module)
+        != detect.baseline_snapshot(head, comparison.name)
     ]
+    if core.kit != detect.baseline_core_snapshot(state, commit=head):
+        uncommitted.insert(0, "rendered-core")
     if uncommitted:
         raise detect.SyncError(
-            "current Rulekit module content is not in HEAD: "
+            "current Rulekit content is not in HEAD: "
             + ", ".join(uncommitted)
         )
+
+    matched = f"rendered core and {len(comparisons)} selected module(s)"
 
     state_path = state.target / ".kit.json"
     if state.baseline_commit == head:
         return (
             f"baseline is already current: {state_path}",
-            f"all {len(comparisons)} selected module(s) match Rulekit HEAD {head}",
+            f"{matched} match Rulekit HEAD {head}",
             "no state update is needed",
         )
 
@@ -89,7 +96,7 @@ def finalize(raw_target):
     answers.write_replacement(state_path, document)
     return (
         f"advanced Rulekit baseline: {state_path}",
-        f"all {len(comparisons)} selected module(s) match committed HEAD {head}",
+        f"{matched} match committed HEAD {head}",
         "review and commit the updated .kit.json in the project repository",
     )
 
@@ -105,7 +112,7 @@ def main():
         print("result: refused to advance Rulekit baseline", file=sys.stderr)
         print(f"reason: {error}", file=sys.stderr)
         print(
-            "next: commit the accepted Rulekit module content and retry",
+            "next: commit the accepted Rulekit content and retry",
             file=sys.stderr,
         )
         return 1

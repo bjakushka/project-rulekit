@@ -312,10 +312,15 @@ def resolved_values(declarations, stored):
     return values
 
 
-def render_claude(
-    kit_root, template, modules, values, module_declarations, value_declarations
+def render_claude_text(
+    template,
+    modules,
+    values,
+    module_declarations,
+    value_declarations,
+    module_entry_points,
 ):
-    text = template.read_text(encoding="utf-8")
+    text = template
     rendered_values = resolved_values(value_declarations, values)
 
     for key, value in rendered_values.items():
@@ -331,7 +336,7 @@ def render_claude(
         )
 
     imports = [
-        f"@{module_entry_point(kit_root, name).as_posix()}"
+        f"@{module_entry_points[name].as_posix()}"
         for name in modules
         if module_declarations[name].get("load") == "always"
     ]
@@ -349,6 +354,23 @@ def render_claude(
             "restore or fix template/CLAUDE.md, then retry",
         )
     return text, rendered_values
+
+
+def render_claude(
+    kit_root, template, modules, values, module_declarations, value_declarations
+):
+    entry_points = {
+        name: module_entry_point(kit_root, name)
+        for name in modules
+    }
+    return render_claude_text(
+        template.read_text(encoding="utf-8"),
+        modules,
+        values,
+        module_declarations,
+        value_declarations,
+        entry_points,
+    )
 
 
 def markdown_bullet(path, description):

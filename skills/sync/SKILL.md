@@ -1,9 +1,9 @@
 ---
 name: sync
 description: >-
-  Compare an adopted project's selected rule modules with its stored Rulekit
-  baseline and the current catalogue, then guide owner-approved synchronization
-  one module at a time.
+  Compare an adopted project's rendered core rules and selected modules with
+  its stored Rulekit baseline and the current catalogue, then guide
+  owner-approved synchronization one item at a time.
 argument-hint: [project-directory]
 allowed-tools:
   - AskUserQuestion
@@ -15,11 +15,12 @@ allowed-tools:
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/show.py" *)'
 ---
 
-# Synchronize rule modules
+# Synchronize core rules and modules
 
-Compare only the modules selected in the adopted project's `.kit.json`.
-Detection is mechanical, but direction, wording, and acceptance belong to the
-owner. Never merge or copy a rule automatically.
+Compare rendered core rules plus the modules selected in the adopted project's
+`.kit.json`. Scaffolds are project-owned after creation and remain outside
+sync. Detection is mechanical, but direction, wording, and acceptance belong
+to the owner. Never merge or copy a rule automatically.
 
 Treat the first argument as the target path. Use the current working directory
 when the argument is empty. The active Rulekit catalogue is always
@@ -38,40 +39,53 @@ This initial invocation requires clean Git working trees at both
 untracked changes, report the refusal and stop until the owner commits or
 reverts them. Do not use `--allow-dirty` for the initial invocation.
 
-The script compares three byte-exact module snapshots:
+The script compares three byte-exact snapshots for rendered core and every
+selected module:
 
 - `baseline`: the Rulekit commit recorded in `.kit.json`
-- `project`: the project's current copied module
+- `project`: the project's current rendered core or copied module
 - `kit`: the current Rulekit working tree
 
-It reports only selected modules that differ. Interpret its statuses as:
+The core snapshot contains the files declared by `core.rules` in the manifest.
+It is rendered from each version's templates with the modules and values stored
+in the project's `.kit.json`. Core scaffolds are not included.
+
+The script reports only items that differ. Interpret its statuses as:
 
 - `project-only`: only the project changed from baseline
 - `kit-only`: only Rulekit changed from baseline
 - `converged`: project and Rulekit contain the same change from baseline
 - `diverged`: both changed and no longer match each other
 
-If every selected module is unchanged, report that no sync is needed and stop.
+If rendered core and every selected module are unchanged, report that no sync
+is needed and stop.
 If detection fails, report the refusal and stop. Do not repair `.kit.json` or
 substitute another baseline.
 
-## Review one module at a time
+## Review one item at a time
 
-For each reported module except `converged`, run this command on one physical
-line:
+For reported rendered core, run this command on one physical line:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/show.py" --target "<target>" --core
+```
+
+For each reported module, run:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/show.py" --target "<target>" --module "<module>"
 ```
 
-The script shows baseline-to-project, baseline-to-kit, and current-kit-to-project
-diffs and the physical project and Rulekit paths for every module file. Use
-those reported paths; do not run shell commands to locate the files or copy
-them merely to prepare the comparison.
+Skip an item already reported as `converged`. The script shows
+baseline-to-project, baseline-to-kit, and current-kit-to-project diffs and the
+physical project and Rulekit template paths for every file. Core diffs show
+rendered content; edit the Rulekit template, never replace it with a rendered
+project file. Use the reported paths; do not run shell commands to locate the
+files or copy them merely to prepare the comparison.
 
 Explain the material difference in plain language, then ask the owner what the
 shared rule should say. Use exactly one question in each `AskUserQuestion`
-call. Resolve one module at a time.
+call. Resolve one item at a time.
 
 Use these defaults as recommendations, never as automatic choices:
 
@@ -80,17 +94,18 @@ Use these defaults as recommendations, never as automatic choices:
 - for `diverged`, compose a merged rule with the owner instead of choosing a
   side
 
-Project-specific behavior does not belong in a shared Rulekit module. When a
-project rule expresses a portable principle with local wording, generalize the
-wording before proposing it for Rulekit.
+Project-specific behavior does not belong in shared Rulekit core or a module.
+When a project rule expresses a portable principle with local wording,
+generalize the wording before proposing it for Rulekit.
 
 ## Apply an approved decision
 
 Before editing, show the exact proposed diff for every affected project and kit
 file. Apply only the owner's explicitly approved wording. The intended resolved
-state is byte-identical module content in the project and current Rulekit. A
-generalized merge therefore replaces the local wording in the project as well
-as updating Rulekit.
+state is byte-identical content between the project and Rulekit's current
+rendered output. Module files therefore match their Rulekit source files;
+project core files match the output of their Rulekit templates. A generalized
+merge replaces the local wording in the project as well as updating Rulekit.
 
 Apply each accepted decision immediately, then recheck on one physical line:
 
@@ -99,15 +114,15 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/detect.py" --target "<target>
 ```
 
 The flag is only for rechecking changes approved and applied during this sync
-run; never use it to bypass an initial cleanliness refusal. A module is resolved
+run; never use it to bypass an initial cleanliness refusal. An item is resolved
 for this run when it is `unchanged` or `converged`. Continue with the remaining
-reported modules. If the owner keeps a project-local difference, leave it
+reported items. If the owner keeps a project-local difference, leave it
 unresolved and say that future sync runs will report it again.
 
-Do not change module selection, sync core or scaffold files, edit `.kit.json`
-by hand, or commit either repository.
+Do not change module selection, sync scaffold files, edit `.kit.json` by hand,
+or commit either repository.
 
-When only `unchanged` or `converged` modules remain, report the changed files.
+When only `unchanged` or `converged` items remain, report the changed files.
 If this run changed Rulekit files, name `${CLAUDE_PLUGIN_ROOT}` as the repository
 the owner must commit and use `AskUserQuestion` to wait for confirmation that
 the commit is complete. If this run changed only project files, do not request
@@ -121,10 +136,10 @@ run this command on one physical line:
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/finalize.py" --target "<target>"
 ```
 
-The finalizer must verify that every selected project module matches current
-Rulekit and that the same Rulekit bytes are committed in `HEAD`. If it refuses,
-report the reason and stop; do not edit `.kit.json` or substitute a commit by
-hand.
+The finalizer must verify that rendered project core and every selected module
+match current Rulekit, and that the source templates and modules producing
+those bytes are committed in `HEAD`. If it refuses, report the reason and stop;
+do not edit `.kit.json` or substitute a commit by hand.
 
 When the finalizer advances `.kit.json`, report that file as changed and use
 `AskUserQuestion` to wait for confirmation that the owner committed the target

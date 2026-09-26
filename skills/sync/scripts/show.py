@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Show three-way text differences for one selected Rulekit module."""
+"""Show three-way text differences for Rulekit core or one selected module."""
 
 import argparse
 import difflib
@@ -15,7 +15,7 @@ def decoded(snapshot, path):
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise detect.SyncError(f"module file is not UTF-8 text: {path}") from error
+        raise detect.SyncError(f"sync file is not UTF-8 text: {path}") from error
 
 
 def snapshot_diff(old, new, old_name, new_name):
@@ -41,12 +41,18 @@ def snapshot_diff(old, new, old_name, new_name):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True, help="adopted project directory")
-    parser.add_argument("--module", required=True, help="selected module name")
+    subject = parser.add_mutually_exclusive_group(required=True)
+    subject.add_argument("--core", action="store_true", help="rendered core rules")
+    subject.add_argument("--module", help="selected module name")
     args = parser.parse_args()
 
     try:
         state = detect.load_state(args.target)
-        comparison = detect.compare_module(state, args.module)
+        comparison = (
+            detect.compare_core(state)
+            if args.core
+            else detect.compare_module(state, args.module)
+        )
         sections = (
             (
                 "Baseline -> project",
@@ -80,7 +86,10 @@ def main():
         print(f"error: {error}", file=sys.stderr)
         return 1
 
-    print(f"Module: `{comparison.module}`")
+    if comparison.kind == "core":
+        print("Core: `rendered-core`")
+    else:
+        print(f"Module: `{comparison.name}`")
     print(f"Status: `{comparison.status}`")
     print("\nFiles:")
     logical_paths = sorted(
@@ -89,7 +98,7 @@ def main():
     for path in logical_paths:
         print(f"- `{path}`")
         print(f"  - project: `{state.target / path}`")
-        print(f"  - kit: `{detect.KIT / 'template' / path}`")
+        print(f"  - kit template: `{detect.KIT / 'template' / path}`")
     for heading, content in sections:
         print(f"\n## {heading}\n")
         print(content)
