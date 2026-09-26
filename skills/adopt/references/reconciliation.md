@@ -145,7 +145,10 @@ Start `rulekit:adopt-reconciliation-reviewer`. Give it the resolved target,
 finished preview, exact reconciliation script path, and completed-item report.
 Wait without asking side questions. If it registers omissions, return to
 `item next`; after resolving them, run the reviewer again. Only a pass with no
-unexplained material omissions or preview rule violations may proceed.
+unexplained material omissions or preview rule violations may proceed. On a
+clean result, the reviewer records fingerprints for the exact completed items
+and preview through `review pass`; the main skill must not record that pass on
+the reviewer's behalf.
 
 After a clean reviewer pass, ask whether the owner wants to review the finished
 preview. Do not require a particular review tool; use what is available in the
@@ -159,6 +162,10 @@ remarks, complete reconciliation:
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" state complete
 ```
+
+The command refuses to complete unless the reviewer pass still matches both
+the reconciliation items and every path and file in the preview. Any later
+decision or preview edit requires another reviewer pass.
 
 `complete` means that reconciliation is complete, not that the source project
 has been changed or the adoption transaction has been approved.

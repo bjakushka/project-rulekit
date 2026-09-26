@@ -45,6 +45,14 @@ Repeat evidence flags as needed and omit `--preview` when absent. Do not
 re-register an existing decision, recommend an outcome, or stop at a fixed
 number.
 
+If there are no findings, record the clean pass against the exact items and
+preview you reviewed. Run this on one physical line:
+
+```bash
+python3 "<reconcile-script>" --target "<resolved-target>" review pass
+```
+
 Return only the number of new items and any refused IDs. If there are none,
 return exactly `No unexplained material omissions or preview rule violations
-found.`
+found.` only after `review pass` succeeds. If it is refused, return the refusal
+instead and do not claim a clean pass.
