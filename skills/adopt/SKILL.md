@@ -160,11 +160,14 @@ as evidence, not authority. Verify material claims against files already read;
 discard unsupported guesses silently.
 
 If the scanner reports no nested Git repositories, do not leave the repository
-mapping empty or treat `.` as an inner repository. A Rulekit project requires at
-least one inner repository. Add a blocking `Next decisions` question for the
-intended relative path and concise English purpose of the first inner
-repository. Make clear that this is the future layout for the clean preview,
-not a claim about the current project.
+mapping empty or treat `.` as an inner repository. Every Rulekit project is an
+outer meta repository plus at least one inner repository; there is no flat
+variant. Propose one inner repository at `project/` with a purpose inferred from
+the project's own content, and name it as a default the owner confirms or
+replaces rather than asking for a path with no proposal. When the project's
+subject suggests a more accurate path, propose that path instead and say why.
+Make clear that this is the future layout for the clean preview, not a claim
+about the current project.
 
 ## Present the diagnostic
 

@@ -1,6 +1,9 @@
 ### How the repositories are organised
 
-- This is a multi-repo setup: the outer meta repo plus one or more inner repos
+- Every project is a multi-repo setup: the outer meta repo plus one or more
+  inner repos. There is no flat variant, and a project with a single subject
+  still has one inner repo. Separating them keeps one workspace-level source of
+  instructions while each inner repo stays self-contained and portable
 - The outer repo holds meta only: project instructions, Rulekit state, and
   workspace-level intake and coordination files
 - Each inner repo is standalone, with its own `.git`
