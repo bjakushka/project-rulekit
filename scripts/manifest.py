@@ -245,9 +245,9 @@ def check_schema(manifest, problems):
 def check_keys(manifest, problems):
     """A module carries something, and its `rules` path resolves.
 
-    A module is rules and/or skills and/or hooks, so at least one of them has
-    to be there: an empty entry is a typo, not a module. `rules` is a path and
-    has to resolve when it is set; `null` means the module ships no rules.
+    A module is rules and/or skills, so at least one of them has to be there:
+    an empty entry is a typo, not a module. `rules` is a path and has to
+    resolve when it is set; `null` means the module ships only skills.
     """
     for key, module in manifest.get("modules", {}).items():
         rules = module.get("rules")
