@@ -288,18 +288,24 @@ def specification_problems(draft, modules, values, require_complete=True):
     return problems
 
 
-def module_rule_files(kit_root, module):
-    directory = kit_root / "template" / "rules" / module
+def module_rule_files(kit_root, rules):
+    """The rule files behind a module's `rules` path, empty when it has none."""
+    if rules is None:
+        return []
+    directory = kit_root / "template" / "rules" / rules
     if directory.is_dir():
         return sorted(directory.glob("*.md"))
     return [directory.with_suffix(".md")]
 
 
-def module_entry_point(kit_root, module):
-    directory = kit_root / "template" / "rules" / module
+def module_entry_point(kit_root, rules):
+    """Where a module's rules start, or None when it ships none."""
+    if rules is None:
+        return None
+    directory = kit_root / "template" / "rules" / rules
     if directory.is_dir():
-        return Path("rules") / module / "INDEX.md"
-    return Path("rules") / f"{module}.md"
+        return Path("rules") / rules / "INDEX.md"
+    return Path("rules") / f"{rules}.md"
 
 
 def resolved_values(declarations, stored):
@@ -339,6 +345,7 @@ def render_claude_text(
         f"@{module_entry_points[name].as_posix()}"
         for name in modules
         if module_declarations[name].get("load") == "always"
+        and module_entry_points[name] is not None
     ]
     block = "\n".join([IMPORTS_START, *sorted(imports), IMPORTS_END])
     pattern = re.compile(
@@ -360,7 +367,7 @@ def render_claude(
     kit_root, template, modules, values, module_declarations, value_declarations
 ):
     entry_points = {
-        name: module_entry_point(kit_root, name)
+        name: module_entry_point(kit_root, module_declarations[name]["rules"])
         for name in modules
     }
     return render_claude_text(
@@ -556,7 +563,8 @@ def render_tree(
 
     copied_rules = 0
     for module in draft["modules"]:
-        for source in module_rule_files(kit_root, module):
+        rules = module_declarations[module]["rules"]
+        for source in module_rule_files(kit_root, rules):
             relative = source.relative_to(kit_root / "template")
             output = destination / relative
             output.parent.mkdir(parents=True, exist_ok=True)

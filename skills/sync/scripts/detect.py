@@ -207,9 +207,12 @@ def module_entry_points_from_git(commit, modules):
     return entry_points
 
 
-def current_module_entry_points(modules):
+def current_module_entry_points(manifest, modules):
+    declarations = manifest.get("modules", {})
     return {
-        module: project_render.module_entry_point(KIT, module)
+        module: project_render.module_entry_point(
+            KIT, declarations.get(module, {}).get("rules")
+        )
         for module in modules
     }
 
@@ -352,7 +355,7 @@ def current_core_snapshot(state):
         template,
         manifest,
         state,
-        current_module_entry_points(state.modules),
+        current_module_entry_points(manifest, state.modules),
         "current manifest",
     )
 
