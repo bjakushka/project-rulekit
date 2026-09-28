@@ -13,6 +13,15 @@
       "scaffold": ["backlog/example-task.tmpl.md"],
       "skills": []
     },
+    "conversations": {
+      "description": "Conversations: stored correspondence",
+      "group": null,
+      "load": "always",
+      "required": false,
+      "rules": "conversations",
+      "scaffold": ["conversations/19930920-owl-post-lost-parcel.tmpl.md"],
+      "skills": []
+    },
     "inbox": {
       "description": "Inbox: raw ideas",
       "group": null,
