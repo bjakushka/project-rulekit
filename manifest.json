@@ -5,72 +5,92 @@
   },
   "modules": {
     "backlog": {
+      "description": "Backlog: developed tasks and findings",
       "group": null,
       "load": "always",
       "required": false,
+      "rules": "backlog",
       "scaffold": ["backlog/example-task.tmpl.md"],
       "skills": []
     },
     "inbox": {
+      "description": "Inbox: raw ideas",
       "group": null,
       "load": "always",
       "required": true,
+      "rules": "inbox",
       "scaffold": ["inbox.tmpl.md"],
       "skills": []
     },
     "llm_instructions": {
+      "description": "LLM instructions: project artifacts",
       "group": null,
       "load": "always",
       "required": false,
+      "rules": "llm_instructions",
       "scaffold": [],
       "skills": []
     },
     "notes": {
+      "description": "Notes: retained project knowledge",
       "group": null,
       "load": "always",
       "required": false,
+      "rules": "notes",
       "scaffold": ["notes/example-note.tmpl.md"],
       "skills": []
     },
     "plans": {
+      "description": "Plans: guides for active work",
       "group": null,
       "load": "always",
       "required": false,
+      "rules": "plans",
       "scaffold": ["plans/19850913-rescue-princess.tmpl.md"],
       "skills": []
     },
     "project-context": {
+      "description": "Project context: stable facts and repository orientation",
       "group": null,
       "load": "always",
       "required": true,
+      "rules": "project-context",
       "scaffold": [],
       "skills": []
     },
     "secrets": {
+      "description": "Secrets: what must never be written into the project",
       "group": null,
       "load": "always",
       "required": true,
+      "rules": "secrets",
       "scaffold": [],
       "skills": []
     },
     "type_coding": {
+      "description": "Project type: coding",
       "group": "type",
       "load": "always",
       "required": true,
+      "rules": "type_coding",
       "scaffold": [],
       "skills": []
     },
     "type_non-coding": {
+      "description": "Project type: non-coding, notes and knowledge",
       "group": "type",
       "load": "always",
       "required": true,
+      "rules": "type_non-coding",
       "scaffold": [],
       "skills": []
     },
     "vcs": {
+      "description": "Version control",
       "group": null,
       "load": "always",
       "required": true,
+      "rules": "vcs",
       "scaffold": [],
       "skills": []
     }

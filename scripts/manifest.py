@@ -36,9 +36,11 @@ MANIFEST = KIT / "manifest.json"
 TEMPLATE = KIT / "template"
 
 MODULE_FIELDS = {
+    "description": (str,),
     "group": (str, type(None)),
     "required": (bool,),
-    "load": (str,),
+    "load": (str, type(None)),
+    "rules": (str, type(None)),
     "scaffold": (list,),
     "skills": (list,),
 }
@@ -88,19 +90,21 @@ def heading(path, level="##"):
     return found[1]
 
 
-def entry_point(root, key):
-    """Where a module's rules start.
+def entry_point(root, rules):
+    """Where a module's rules start, or None when it has none.
 
-    The key is the path, without an extension: the script looks at what is
-    on disk. A directory is a composite module and starts at its `INDEX.md`;
-    otherwise the module is a single file, `<key>.md`.
+    `rules` is the manifest's path to them, without an extension: the script
+    looks at what is on disk. A directory is a composite module and starts at
+    its `INDEX.md`; otherwise the module is a single file, `<rules>.md`.
     """
-    if (root / "rules" / key).is_dir():
-        return Path("rules") / key / "INDEX.md"
-    return Path("rules") / f"{key}.md"
+    if rules is None:
+        return None
+    if (root / "rules" / rules).is_dir():
+        return Path("rules") / rules / "INDEX.md"
+    return Path("rules") / f"{rules}.md"
 
 
-def rule_files(root, key):
+def rule_files(root, rules):
     """The rules files of one module, found on disk, not by reading them.
 
     A composite module is its whole directory: every `.md` in it belongs to
@@ -108,15 +112,17 @@ def rule_files(root, key):
     the scripts have no business following them - the manifest and the disk
     are their source of truth.
     """
-    directory = root / "rules" / key
+    if rules is None:
+        return []
+    directory = root / "rules" / rules
     if directory.is_dir():
         return sorted(p.relative_to(root) for p in directory.glob("*.md"))
-    return [Path("rules") / f"{key}.md"]
+    return [Path("rules") / f"{rules}.md"]
 
 
-def module_files(key, module, root=TEMPLATE):
+def module_files(module, root=TEMPLATE):
     """Every file a module contributes, as (kind, relative path) pairs."""
-    for rel in rule_files(root, key):
+    for rel in rule_files(root, module["rules"]):
         yield "rules", rel
     for name in module["scaffold"]:
         yield "scaffold", Path(name)
@@ -138,7 +144,7 @@ def cmd_list(manifest):
 
     for key in sorted(modules):
         module = modules[key]
-        desc = heading(TEMPLATE / entry_point(TEMPLATE, key))
+        desc = module.get("description")
 
         flags = []
         group = module.get("group")
@@ -150,13 +156,15 @@ def cmd_list(manifest):
             flags.append("required")
         else:
             flags.append("optional")
-        if module.get("load", "always") != "always":
-            flags.append(module["load"])
+        load = module.get("load")
+        if load is not None and load != "always":
+            flags.append(load)
 
         suffix = f"  [{', '.join(flags)}]" if flags else ""
         print(f"{key}{suffix}")
-        source = Path("template") / entry_point(TEMPLATE, key)
-        print(f"    source: {source.as_posix()}")
+        entry = entry_point(TEMPLATE, module.get("rules"))
+        if entry is not None:
+            print(f"    source: {(Path('template') / entry).as_posix()}")
         if desc:
             print(f"    {desc}")
     return 0
@@ -208,8 +216,10 @@ def check_schema(manifest, problems):
         for field in module:
             if field not in MODULE_FIELDS:
                 problems.append(f"{key}: unknown field `{field}`")
-        if module.get("load") not in LOAD_VALUES:
-            problems.append(f"{key}: `load` must be one of {sorted(LOAD_VALUES)}")
+        if module.get("load") is not None and module["load"] not in LOAD_VALUES:
+            problems.append(
+                f"{key}: `load` must be `null` or one of {sorted(LOAD_VALUES)}"
+            )
 
     for key, value in manifest.get("values", {}).items():
         for field, types in VALUE_FIELDS.items():
@@ -233,20 +243,39 @@ def check_schema(manifest, problems):
 
 
 def check_keys(manifest, problems):
-    """The key is the path to the module's rules, so it has to resolve."""
-    for key in manifest.get("modules", {}):
-        directory = TEMPLATE / "rules" / key
+    """A module carries something, and its `rules` path resolves.
+
+    A module is rules and/or skills and/or hooks, so at least one of them has
+    to be there: an empty entry is a typo, not a module. `rules` is a path and
+    has to resolve when it is set; `null` means the module ships no rules.
+    """
+    for key, module in manifest.get("modules", {}).items():
+        rules = module.get("rules")
+        if rules is None and not module.get("skills"):
+            problems.append(
+                f"{key}: carries neither rules nor skills, so it contributes "
+                "nothing"
+            )
+        if rules is None:
+            if module.get("load") is not None:
+                problems.append(
+                    f"{key}: has no rules, so `load` must be `null`"
+                )
+            continue
+        directory = TEMPLATE / "rules" / rules
         if directory.is_dir():
             if not (directory / "INDEX.md").is_file():
                 problems.append(
-                    f"{key}: `rules/{key}/` is a composite module, so it must "
+                    f"{key}: `rules/{rules}/` is a composite module, so it must "
                     "contain an `INDEX.md` as its entry point"
                 )
-        elif not (TEMPLATE / "rules" / f"{key}.md").is_file():
+        elif not (TEMPLATE / "rules" / f"{rules}.md").is_file():
             problems.append(
-                f"{key}: resolves to neither `rules/{key}.md` nor a "
-                f"directory `rules/{key}/`"
+                f"{key}: `rules` resolves to neither `rules/{rules}.md` nor a "
+                f"directory `rules/{rules}/`"
             )
+        if module.get("load") is None:
+            problems.append(f"{key}: has rules, so `load` must not be `null`")
 
 
 def check_files(manifest, problems):
@@ -257,7 +286,7 @@ def check_files(manifest, problems):
     """
     owned = set()
     for key, module in manifest.get("modules", {}).items():
-        for _, rel in module_files(key, module):
+        for _, rel in module_files(module):
             if not (TEMPLATE / rel).exists():
                 problems.append(f"{key}: `{rel}` does not exist")
             owned.add(rel)
@@ -275,15 +304,20 @@ def check_files(manifest, problems):
 
 
 def check_modules(manifest, problems):
-    """Headings, and the `.tmpl` suffix on scaffolds.
+    """Headings, the description, and the `.tmpl` suffix on scaffolds.
 
     The entry point of a module carries a `##` naming the module as a whole.
     The other files of a composite module are parts of it, so they open at
     `###` instead.
+
+    The manifest owns the description, because a module with no rules has no
+    heading to read it from. The heading stays in the rules file for the model,
+    and the two are held equal here: left to drift they would not merely differ,
+    they would come to mean different things.
     """
     for key, module in manifest.get("modules", {}).items():
-        entry = entry_point(TEMPLATE, key)
-        for rel in rule_files(TEMPLATE, key):
+        entry = entry_point(TEMPLATE, module.get("rules"))
+        for rel in rule_files(TEMPLATE, module.get("rules")):
             path = TEMPLATE / rel
             if not path.is_file():
                 continue
@@ -296,6 +330,17 @@ def check_modules(manifest, problems):
             elif found[0] != want:
                 problems.append(
                     f"{key}: `{rel}` opens at `{found[0]}`, expected `{want}`"
+                )
+
+        described = module.get("description")
+        if not described:
+            problems.append(f"{key}: `description` must not be empty")
+        elif entry is not None:
+            found = heading(TEMPLATE / entry)
+            if found is not None and found != described:
+                problems.append(
+                    f"{key}: `description` and the `{entry}` heading differ: "
+                    f"`{described}` against `{found}`"
                 )
 
         for name in module.get("scaffold", []):
