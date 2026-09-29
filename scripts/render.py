@@ -298,14 +298,35 @@ def module_rule_files(kit_root, rules):
     return [directory.with_suffix(".md")]
 
 
-def module_entry_point(kit_root, rules):
-    """Where a module's rules start, or None when it ships none."""
+def module_rule_target(module, rules, source):
+    """Where a rule file held under `rules` lands in a project.
+
+    The kit locates its own files by the manifest's `rules` path; a project
+    names them after the module key. The two coincide today, and nothing may
+    depend on that.
+    """
+    parts = Path(source).parts
+    if parts[:1] != ("rules",) or rules == module:
+        return Path(source)
+    tail = parts[1:]
+    if tail[:1] == (f"{rules}.md",):
+        return Path("rules") / f"{module}.md"
+    return Path("rules") / module / Path(*tail[1:])
+
+
+def module_entry_point(kit_root, module, rules):
+    """Where a module's rules start in a project, or None when it ships none.
+
+    `rules` locates the files inside the kit; the project names them after the
+    module key, so a project never depends on how the kit organises its own
+    template.
+    """
     if rules is None:
         return None
     directory = kit_root / "template" / "rules" / rules
     if directory.is_dir():
-        return Path("rules") / rules / "INDEX.md"
-    return Path("rules") / f"{rules}.md"
+        return Path("rules") / module / "INDEX.md"
+    return Path("rules") / f"{module}.md"
 
 
 def resolved_values(declarations, stored):
@@ -367,7 +388,9 @@ def render_claude(
     kit_root, template, modules, values, module_declarations, value_declarations
 ):
     entry_points = {
-        name: module_entry_point(kit_root, module_declarations[name]["rules"])
+        name: module_entry_point(
+            kit_root, name, module_declarations[name]["rules"]
+        )
         for name in modules
     }
     return render_claude_text(
@@ -565,8 +588,9 @@ def render_tree(
     for module in draft["modules"]:
         rules = module_declarations[module]["rules"]
         for source in module_rule_files(kit_root, rules):
-            relative = source.relative_to(kit_root / "template")
-            output = destination / relative
+            output = destination / module_rule_target(
+                module, rules, source.relative_to(kit_root / "template")
+            )
             output.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, output)
             copied_rules += 1

@@ -71,7 +71,9 @@ def finalize(raw_target):
         comparison.name
         for comparison in comparisons
         if comparison.kit
-        != detect.baseline_snapshot(head, comparison.name)
+        != detect.baseline_snapshot(
+            head, comparison.name, state.current_rules(comparison.name)
+        )
     ]
     if core.kit != detect.baseline_core_snapshot(state, commit=head):
         uncommitted.insert(0, "rendered-core")
