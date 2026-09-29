@@ -444,7 +444,11 @@ def cmd_brief(raw_target, key, values, repositories):
         )
 
     problems = brief_problems(
-        answers["brief"], modules, answers["modules"], require_complete=False
+        KIT,
+        answers["brief"],
+        modules,
+        answers["modules"],
+        require_complete=False,
     )
     if problems:
         return refuse_brief(path, problems[0], "correct the project brief and retry")
@@ -550,6 +554,7 @@ def cmd_check(raw_target):
     problems.extend(value_problems(values, answers["values"]))
     problems.extend(
         brief_problems(
+            KIT,
             answers["brief"],
             modules,
             answers["modules"],

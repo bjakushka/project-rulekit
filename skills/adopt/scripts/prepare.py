@@ -100,7 +100,7 @@ def validated_inputs(raw_target):
         path, "prepare adoption preview", "modules", "values"
     )
     problems = project_render.specification_problems(
-        draft, modules, values, require_complete=True
+        KIT, draft, modules, values, require_complete=True
     )
     if problems:
         raise CommandError(

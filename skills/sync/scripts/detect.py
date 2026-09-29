@@ -39,17 +39,11 @@ class SyncState:
     baseline_declarations: dict[str, dict]
     current_declarations: dict[str, dict]
 
-    def baseline_rules(self, module):
-        """The baseline's rules path, falling back to the key.
-
-        A manifest written before the `rules` field existed carries no such
-        key, and there the module name was the path.
-        """
-        declaration = self.baseline_declarations.get(module, {})
-        return declaration.get("rules", module)
-
-    def current_rules(self, module):
-        return self.current_declarations.get(module, {}).get("rules")
+    def has_rules(self, module):
+        """Whether the module ships rules, read from the kit's own layout."""
+        return (
+            KIT / "template" / "modules" / module / "rules"
+        ).is_dir()
 
 
 @dataclass(frozen=True)
@@ -184,9 +178,9 @@ def manifest_from_git(commit):
         raise SyncError(f"baseline manifest is invalid JSON: {error}") from error
 
 
-def module_paths_from_git(commit, module, rules):
+def module_paths_from_git(commit, module, has_rules):
     """The baseline's rule files, or none when the module ships no rules."""
-    if rules is None:
+    if not has_rules:
         return []
     output = run_git(
         "ls-tree",
@@ -210,13 +204,12 @@ def module_paths_from_git(commit, module, rules):
     return paths
 
 
-def module_entry_points_from_git(commit, modules, rules_of):
+def module_entry_points_from_git(commit, modules, has_rules_of):
     entry_points = {}
     for module in modules:
-        rules = rules_of(module)
-        if rules is None:
+        if not has_rules_of(module):
             continue
-        paths = module_paths_from_git(commit, module, rules)
+        paths = module_paths_from_git(commit, module, True)
         if f"template/modules/{module}/rules/INDEX.md" not in paths:
             raise SyncError(f"baseline module has no INDEX.md: {module}")
         entry_points[module] = Path(target_rule_path(module, "INDEX.md"))
@@ -226,9 +219,7 @@ def module_entry_points_from_git(commit, modules, rules_of):
 def current_module_entry_points(manifest, modules):
     declarations = manifest.get("modules", {})
     return {
-        module: project_render.module_entry_point(
-            KIT, module, declarations.get(module, {}).get("rules")
-        )
+        module: project_render.module_entry_point(KIT, module)
         for module in modules
     }
 
@@ -238,25 +229,27 @@ def target_rule_path(module, name):
     return project_render.module_rule_target(module, name).as_posix()
 
 
-def baseline_snapshot(commit, module, rules):
+def baseline_snapshot(commit, module, has_rules):
     snapshot = {}
-    for source in module_paths_from_git(commit, module, rules):
+    for source in module_paths_from_git(commit, module, has_rules):
         snapshot[target_rule_path(module, Path(source).name)] = run_git(
             "show", f"{commit}:{source}"
         )
     return snapshot
 
 
-def filesystem_snapshot(directory, module, rules, subject, allow_missing=False):
+def filesystem_snapshot(
+    directory, module, has_rules, subject, allow_missing=False
+):
     """One module's rule files, keyed by where they belong in a project.
 
     `directory` is where the files sit: `modules/<key>/rules/` inside the kit,
     `rules/<key>/` inside a project. The key of the returned mapping is always
     the project-relative path, so the baseline, project and kit snapshots can be
-    compared against each other. `rules` is None for a module that ships only
-    skills, which has no rule files to read.
+    compared against each other. A module that ships only skills has no rule
+    files to read.
     """
-    if rules is None:
+    if not has_rules:
         return {}
 
     if directory.is_symlink():
@@ -293,19 +286,19 @@ def compare_module(state, module):
     if module not in state.modules:
         raise SyncError(f"module is not selected by the project: {module}")
     baseline = baseline_snapshot(
-        state.baseline_commit, module, state.baseline_rules(module)
+        state.baseline_commit, module, state.has_rules(module)
     )
     project = filesystem_snapshot(
         state.target / "rules" / module,
         module,
-        state.current_rules(module),
+        state.has_rules(module),
         "project",
         allow_missing=True,
     )
     kit = filesystem_snapshot(
         KIT / "template" / "modules" / module / "rules",
         module,
-        state.current_rules(module),
+        state.has_rules(module),
         "current kit",
     )
     return Comparison(
@@ -378,13 +371,7 @@ def baseline_core_snapshot(state, commit=None):
         template,
         manifest,
         state,
-        module_entry_points_from_git(
-            commit,
-            state.modules,
-            lambda module: manifest.get("modules", {}).get(
-                module, {}
-            ).get("rules", module),
-        ),
+        module_entry_points_from_git(commit, state.modules, state.has_rules),
         "baseline manifest",
     )
 

@@ -40,11 +40,9 @@ MODULE_FIELDS = {
     "group": (str, type(None)),
     "required": (bool,),
     "load": (str, type(None)),
-    "rules": (str, type(None)),
-    "scaffold": (list,),
-    "skills": (list,),
 }
 LOAD_VALUES = {"always", "on-demand"}
+KIND_DIRECTORIES = ("rules", "scaffold", "skills")
 VALUE_FIELDS = {
     "choices": (list, type(None)),
     "default": (str, type(None)),
@@ -95,39 +93,51 @@ def module_root(key):
     return Path("modules") / key
 
 
-def entry_point(root, key, rules):
+def has_rules(root, key):
+    """Whether a module ships rules at all."""
+    return (root / module_root(key) / "rules").is_dir()
+
+
+def entry_point(root, key):
     """Where a module's rules start, or None when it ships none.
 
     Every module is composite: its rules are a directory that starts at
-    `INDEX.md`. `rules` says whether the module has any.
+    `INDEX.md`.
     """
-    if rules is None:
+    if not has_rules(root, key):
         return None
     return module_root(key) / "rules" / "INDEX.md"
 
 
-def rule_files(root, key, rules):
+def rule_files(root, key):
     """The rules files of one module, found on disk, not by reading them.
 
     A module's rules are its whole `rules/` directory: every `.md` in it
     belongs to the module. `@` imports are how the model pulls the parts
-    together, and the scripts have no business following them - the manifest
-    and the disk are their source of truth.
+    together, and the scripts have no business following them - the disk is
+    their source of truth.
     """
-    if rules is None:
+    if not has_rules(root, key):
         return []
     directory = root / module_root(key) / "rules"
     return sorted(p.relative_to(root) for p in directory.glob("*.md"))
 
 
-def module_files(key, module, root=TEMPLATE):
+def kind_files(root, key, kind):
+    """Every file a module contributes of one kind, found by glob."""
+    directory = root / module_root(key) / kind
+    if not directory.is_dir():
+        return []
+    return sorted(
+        p.relative_to(root) for p in directory.rglob("*") if p.is_file()
+    )
+
+
+def module_files(key, root=TEMPLATE):
     """Every file a module contributes, as (kind, relative path) pairs."""
-    for rel in rule_files(root, key, module["rules"]):
-        yield "rules", rel
-    for name in module["scaffold"]:
-        yield "scaffold", module_root(key) / "scaffold" / name
-    for name in module["skills"]:
-        yield "skills", Path(name)
+    for kind in KIND_DIRECTORIES:
+        for rel in kind_files(root, key, kind):
+            yield kind, rel
 
 
 def cmd_list(manifest):
@@ -162,7 +172,7 @@ def cmd_list(manifest):
 
         suffix = f"  [{', '.join(flags)}]" if flags else ""
         print(f"{key}{suffix}")
-        entry = entry_point(TEMPLATE, key, module.get("rules"))
+        entry = entry_point(TEMPLATE, key)
         if entry is not None:
             print(f"    source: {(Path('template') / entry).as_posix()}")
         if desc:
@@ -243,31 +253,49 @@ def check_schema(manifest, problems):
 
 
 def check_keys(manifest, problems):
-    """A module carries something, and its `rules` path resolves.
+    """A module is a directory that carries something.
 
-    A module is rules and/or skills, so at least one of them has to be there:
-    an empty entry is a typo, not a module. `rules` is a path and has to
-    resolve when it is set; `null` means the module ships only skills.
+    Its contents live in one subdirectory per kind of file it contributes, and
+    at least one of them has to be there: an empty directory is a typo, not a
+    module. `load` is null exactly when the module ships no rules.
     """
     for key, module in manifest.get("modules", {}).items():
-        rules = module.get("rules")
-        if rules is None and not module.get("skills"):
+        root = TEMPLATE / module_root(key)
+        if not root.is_dir():
+            problems.append(f"{key}: has no `{module_root(key)}/` directory")
+            continue
+
+        kinds = [kind for kind in KIND_DIRECTORIES if (root / kind).is_dir()]
+        unknown = sorted(
+            child.name
+            for child in root.iterdir()
+            if child.name not in KIND_DIRECTORIES
+        )
+        if unknown:
+            problems.append(
+                f"{key}: `{module_root(key)}/` holds entries that are not a "
+                f"kind of file a module contributes: {', '.join(unknown)}"
+            )
+        if not kinds:
             problems.append(
                 f"{key}: carries neither rules nor skills, so it contributes "
                 "nothing"
             )
-        if rules is None:
+
+        for rel in kind_files(TEMPLATE, key, "rules"):
+            if rel.suffix != ".md":
+                problems.append(
+                    f"{key}: `{rel}` is under `rules/` but is not Markdown"
+                )
+
+        if not has_rules(TEMPLATE, key):
             if module.get("load") is not None:
                 problems.append(
                     f"{key}: has no rules, so `load` must be `null`"
                 )
             continue
-        directory = TEMPLATE / module_root(key) / "rules"
-        if not directory.is_dir():
-            problems.append(
-                f"{key}: declares rules but has no `{module_root(key)}/rules/`"
-            )
-        elif not (directory / "INDEX.md").is_file():
+        directory = root / "rules"
+        if not (directory / "INDEX.md").is_file():
             problems.append(
                 f"{key}: `{module_root(key)}/rules/` must contain an `INDEX.md` "
                 "as its entry point"
@@ -277,28 +305,40 @@ def check_keys(manifest, problems):
 
 
 def check_files(manifest, problems):
-    """Every file exists, and every file in template/ belongs to something.
+    """Every file under template/ belongs to a declared module or to core.
 
-    A file cannot belong to two modules: the key is the path, so one module
-    is one path. Only orphans are worth looking for.
+    Membership is a prefix test rather than a list of declared paths: a file
+    under `modules/<key>/` belongs to that module whatever its extension, so a
+    skill's scripts and references are covered as well as its Markdown.
     """
-    owned = set()
-    for key, module in manifest.get("modules", {}).items():
-        for _, rel in module_files(key, module):
-            if not (TEMPLATE / rel).exists():
-                problems.append(f"{key}: `{rel}` does not exist")
-            owned.add(rel)
+    declared = set(manifest.get("modules", {}))
 
-    for section in ("rules", "scaffold"):
-        for name in manifest.get("core", {}).get(section, []):
-            if not (TEMPLATE / name).exists():
-                problems.append(f"core: `{name}` does not exist")
-            owned.add(Path(name))
+    for name in manifest.get("core", {}).get("rules", []) + manifest.get(
+        "core", {}
+    ).get("scaffold", []):
+        if not (TEMPLATE / name).exists():
+            problems.append(f"core: `{name}` does not exist")
 
-    for path in sorted(TEMPLATE.rglob("*.md")):
+    core_files = {
+        Path(name)
+        for section in ("rules", "scaffold")
+        for name in manifest.get("core", {}).get(section, [])
+    }
+
+    for path in sorted(TEMPLATE.rglob("*")):
+        if not path.is_file():
+            continue
         rel = path.relative_to(TEMPLATE)
-        if rel not in owned:
-            problems.append(f"`{rel}` is in template/ but no module owns it")
+        if rel in core_files:
+            continue
+        parts = rel.parts
+        if parts[:1] != ("modules",) or len(parts) < 3:
+            problems.append(f"`{rel}` is in template/ but nothing owns it")
+        elif parts[1] not in declared:
+            problems.append(
+                f"`{rel}` is under `modules/{parts[1]}/`, which the manifest "
+                "does not declare"
+            )
 
 
 def check_modules(manifest, problems):
@@ -314,8 +354,8 @@ def check_modules(manifest, problems):
     they would come to mean different things.
     """
     for key, module in manifest.get("modules", {}).items():
-        entry = entry_point(TEMPLATE, key, module.get("rules"))
-        for rel in rule_files(TEMPLATE, key, module.get("rules")):
+        entry = entry_point(TEMPLATE, key)
+        for rel in rule_files(TEMPLATE, key):
             path = TEMPLATE / rel
             if not path.is_file():
                 continue
@@ -341,10 +381,10 @@ def check_modules(manifest, problems):
                     f"`{described}` against `{found}`"
                 )
 
-        for name in module.get("scaffold", []):
-            if not name.endswith(".tmpl.md"):
+        for rel in kind_files(TEMPLATE, key, "scaffold"):
+            if not rel.name.endswith(".tmpl.md"):
                 problems.append(
-                    f"{key}: scaffold `{name}` is missing the `.tmpl` suffix"
+                    f"{key}: scaffold `{rel}` is missing the `.tmpl` suffix"
                 )
 
 

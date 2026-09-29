@@ -8,100 +8,67 @@
       "description": "Backlog: developed tasks and findings",
       "group": null,
       "load": "always",
-      "required": false,
-      "rules": "backlog",
-      "scaffold": ["backlog/example-task.tmpl.md"],
-      "skills": []
+      "required": false
     },
     "conversations": {
       "description": "Conversations: stored correspondence",
       "group": null,
       "load": "always",
-      "required": false,
-      "rules": "conversations",
-      "scaffold": ["conversations/19930920-owl-post-lost-parcel.tmpl.md"],
-      "skills": []
+      "required": false
     },
     "inbox": {
       "description": "Inbox: raw ideas",
       "group": null,
       "load": "always",
-      "required": true,
-      "rules": "inbox",
-      "scaffold": ["inbox.tmpl.md"],
-      "skills": []
+      "required": true
     },
     "llm_instructions": {
       "description": "LLM instructions: project artifacts",
       "group": null,
       "load": "always",
-      "required": false,
-      "rules": "llm_instructions",
-      "scaffold": [],
-      "skills": []
+      "required": false
     },
     "notes": {
       "description": "Notes: retained project knowledge",
       "group": null,
       "load": "always",
-      "required": false,
-      "rules": "notes",
-      "scaffold": ["notes/example-note.tmpl.md"],
-      "skills": []
+      "required": false
     },
     "plans": {
       "description": "Plans: guides for active work",
       "group": null,
       "load": "always",
-      "required": false,
-      "rules": "plans",
-      "scaffold": ["plans/19850913-rescue-princess.tmpl.md"],
-      "skills": []
+      "required": false
     },
     "project-context": {
       "description": "Project context: stable facts and repository orientation",
       "group": null,
       "load": "always",
-      "required": true,
-      "rules": "project-context",
-      "scaffold": [],
-      "skills": []
+      "required": true
     },
     "secrets": {
       "description": "Secrets: what must never be written into the project",
       "group": null,
       "load": "always",
-      "required": true,
-      "rules": "secrets",
-      "scaffold": [],
-      "skills": []
+      "required": true
     },
     "type_coding": {
       "description": "Project type: coding",
       "group": "type",
       "load": "always",
-      "required": true,
-      "rules": "type_coding",
-      "scaffold": [],
-      "skills": []
+      "required": true
     },
     "type_non-coding": {
       "description": "Project type: non-coding, notes and knowledge",
       "group": "type",
       "load": "always",
-      "required": true,
-      "rules": "type_non-coding",
-      "scaffold": [],
-      "skills": []
+      "required": true
     },
     "vcs": {
       "description": "Version control",
       "group": null,
       "load": "always",
-      "required": true,
-      "rules": "vcs",
-      "scaffold": [],
-      "skills": []
+      "required": true
     }
   },
   "paths": {

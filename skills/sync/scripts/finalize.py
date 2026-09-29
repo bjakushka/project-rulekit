@@ -72,7 +72,7 @@ def finalize(raw_target):
         for comparison in comparisons
         if comparison.kit
         != detect.baseline_snapshot(
-            head, comparison.name, state.current_rules(comparison.name)
+            head, comparison.name, state.has_rules(comparison.name)
         )
     ]
     if core.kit != detect.baseline_core_snapshot(state, commit=head):

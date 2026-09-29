@@ -216,18 +216,19 @@ def paths_overlap(left, right):
     return left_parts[:common] == right_parts[:common]
 
 
-def generated_target_paths(modules, selected_modules):
+def generated_target_paths(kit_root, modules, selected_modules):
     generated = set(RESERVED_TARGET_PATHS)
     for name in selected_modules:
-        module = modules.get(name)
-        if module is None:
+        if name not in modules:
             continue
-        for scaffold in module.get("scaffold", []):
+        for scaffold in module_scaffold_files(kit_root, name):
             generated.add(scaffold_output_path(scaffold).as_posix())
     return sorted(generated)
 
 
-def brief_problems(brief, modules, selected_modules, require_complete=False):
+def brief_problems(
+    kit_root, brief, modules, selected_modules, require_complete=False
+):
     problems = []
     context = brief["context"]
     if require_complete and (context is None or not context.strip()):
@@ -256,7 +257,7 @@ def brief_problems(brief, modules, selected_modules, require_complete=False):
             if paths_overlap(path, other):
                 problems.append(f"repository paths overlap: {path}, {other}")
 
-    reserved = generated_target_paths(modules, selected_modules)
+    reserved = generated_target_paths(kit_root, modules, selected_modules)
     for path in normalized:
         conflicts = [
             candidate for candidate in reserved if paths_overlap(path, candidate)
@@ -269,7 +270,9 @@ def brief_problems(brief, modules, selected_modules, require_complete=False):
     return problems
 
 
-def specification_problems(draft, modules, values, require_complete=True):
+def specification_problems(
+    kit_root, draft, modules, values, require_complete=True
+):
     problems = [
         reason
         for reason, _next_step in module_selection_problems(
@@ -279,6 +282,7 @@ def specification_problems(draft, modules, values, require_complete=True):
     problems.extend(value_problems(values, draft["values"]))
     problems.extend(
         brief_problems(
+            kit_root,
             draft["brief"],
             modules,
             draft["modules"],
@@ -293,11 +297,26 @@ def module_source_root(kit_root, module):
     return kit_root / "template" / "modules" / module
 
 
-def module_rule_files(kit_root, module, rules):
+def module_has_rules(kit_root, module):
+    """Whether a module ships rules at all."""
+    return (module_source_root(kit_root, module) / "rules").is_dir()
+
+
+def module_rule_files(kit_root, module):
     """A module's rule files, empty when it ships none."""
-    if rules is None:
+    if not module_has_rules(kit_root, module):
         return []
     return sorted((module_source_root(kit_root, module) / "rules").glob("*.md"))
+
+
+def module_scaffold_files(kit_root, module):
+    """A module's scaffold templates, as paths relative to its `scaffold/`."""
+    root = module_source_root(kit_root, module) / "scaffold"
+    if not root.is_dir():
+        return []
+    return sorted(
+        p.relative_to(root) for p in root.rglob("*") if p.is_file()
+    )
 
 
 def module_rule_target(module, name):
@@ -305,13 +324,13 @@ def module_rule_target(module, name):
     return Path("rules") / module / name
 
 
-def module_entry_point(kit_root, module, rules):
+def module_entry_point(kit_root, module):
     """Where a module's rules start in a project, or None when it ships none.
 
     Every module is composite, so a project always reaches its rules through
     `rules/<module>/INDEX.md`.
     """
-    if rules is None:
+    if not module_has_rules(kit_root, module):
         return None
     return module_rule_target(module, "INDEX.md")
 
@@ -375,9 +394,7 @@ def render_claude(
     kit_root, template, modules, values, module_declarations, value_declarations
 ):
     entry_points = {
-        name: module_entry_point(
-            kit_root, name, module_declarations[name]["rules"]
-        )
+        name: module_entry_point(kit_root, name)
         for name in modules
     }
     return render_claude_text(
@@ -520,7 +537,8 @@ def render_tree(
     kit_commit,
 ):
     problems = specification_problems(
-        draft, module_declarations, value_declarations, require_complete=True
+        kit_root, draft, module_declarations, value_declarations,
+        require_complete=True,
     )
     if problems:
         raise ProjectError(
@@ -573,8 +591,7 @@ def render_tree(
 
     copied_rules = 0
     for module in draft["modules"]:
-        rules = module_declarations[module]["rules"]
-        for source in module_rule_files(kit_root, module, rules):
+        for source in module_rule_files(kit_root, module):
             output = destination / module_rule_target(module, source.name)
             output.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, output)
@@ -582,7 +599,7 @@ def render_tree(
 
     copied_scaffolds = 0
     for module in draft["modules"]:
-        for name in module_declarations[module]["scaffold"]:
+        for name in module_scaffold_files(kit_root, module):
             source = module_source_root(kit_root, module) / "scaffold" / name
             output = destination / scaffold_output_path(name)
             if output.exists():
