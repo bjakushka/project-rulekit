@@ -288,45 +288,32 @@ def specification_problems(draft, modules, values, require_complete=True):
     return problems
 
 
-def module_rule_files(kit_root, rules):
-    """The rule files behind a module's `rules` path, empty when it has none."""
+def module_source_root(kit_root, module):
+    """Where one module's files live inside the kit."""
+    return kit_root / "template" / "modules" / module
+
+
+def module_rule_files(kit_root, module, rules):
+    """A module's rule files, empty when it ships none."""
     if rules is None:
         return []
-    directory = kit_root / "template" / "rules" / rules
-    if directory.is_dir():
-        return sorted(directory.glob("*.md"))
-    return [directory.with_suffix(".md")]
+    return sorted((module_source_root(kit_root, module) / "rules").glob("*.md"))
 
 
-def module_rule_target(module, rules, source):
-    """Where a rule file held under `rules` lands in a project.
-
-    The kit locates its own files by the manifest's `rules` path; a project
-    names them after the module key. The two coincide today, and nothing may
-    depend on that.
-    """
-    parts = Path(source).parts
-    if parts[:1] != ("rules",) or rules == module:
-        return Path(source)
-    tail = parts[1:]
-    if tail[:1] == (f"{rules}.md",):
-        return Path("rules") / f"{module}.md"
-    return Path("rules") / module / Path(*tail[1:])
+def module_rule_target(module, name):
+    """Where a module's rule file lands in a project: `rules/<module>/<name>`."""
+    return Path("rules") / module / name
 
 
 def module_entry_point(kit_root, module, rules):
     """Where a module's rules start in a project, or None when it ships none.
 
-    `rules` locates the files inside the kit; the project names them after the
-    module key, so a project never depends on how the kit organises its own
-    template.
+    Every module is composite, so a project always reaches its rules through
+    `rules/<module>/INDEX.md`.
     """
     if rules is None:
         return None
-    directory = kit_root / "template" / "rules" / rules
-    if directory.is_dir():
-        return Path("rules") / module / "INDEX.md"
-    return Path("rules") / f"{module}.md"
+    return module_rule_target(module, "INDEX.md")
 
 
 def resolved_values(declarations, stored):
@@ -587,10 +574,8 @@ def render_tree(
     copied_rules = 0
     for module in draft["modules"]:
         rules = module_declarations[module]["rules"]
-        for source in module_rule_files(kit_root, rules):
-            output = destination / module_rule_target(
-                module, rules, source.relative_to(kit_root / "template")
-            )
+        for source in module_rule_files(kit_root, module, rules):
+            output = destination / module_rule_target(module, source.name)
             output.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, output)
             copied_rules += 1
@@ -598,7 +583,7 @@ def render_tree(
     copied_scaffolds = 0
     for module in draft["modules"]:
         for name in module_declarations[module]["scaffold"]:
-            source = kit_root / "template" / name
+            source = module_source_root(kit_root, module) / "scaffold" / name
             output = destination / scaffold_output_path(name)
             if output.exists():
                 raise ProjectError(

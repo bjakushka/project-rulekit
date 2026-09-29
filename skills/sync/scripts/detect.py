@@ -194,20 +194,16 @@ def module_paths_from_git(commit, module, rules):
         "--name-only",
         commit,
         "--",
-        "template/rules",
+        f"template/modules/{module}/rules",
         text=True,
     )
-    single = f"template/rules/{rules}.md"
-    directory = f"template/rules/{rules}/"
+    directory = f"template/modules/{module}/rules/"
     paths = [
         path
         for path in output.splitlines()
-        if path == single
-        or (
-            path.startswith(directory)
-            and Path(path).parent.as_posix() == directory.rstrip("/")
-            and path.endswith(".md")
-        )
+        if path.startswith(directory)
+        and Path(path).parent.as_posix() == directory.rstrip("/")
+        and path.endswith(".md")
     ]
     if not paths:
         raise SyncError(f"baseline module has no rule files: {module}")
@@ -221,16 +217,9 @@ def module_entry_points_from_git(commit, modules, rules_of):
         if rules is None:
             continue
         paths = module_paths_from_git(commit, module, rules)
-        single = f"template/rules/{rules}.md"
-        index = f"template/rules/{rules}/INDEX.md"
-        if single in paths:
-            entry_points[module] = Path("rules") / f"{module}.md"
-        elif index in paths:
-            entry_points[module] = Path("rules") / module / "INDEX.md"
-        else:
-            raise SyncError(
-                f"baseline composite module has no INDEX.md: {module}"
-            )
+        if f"template/modules/{module}/rules/INDEX.md" not in paths:
+            raise SyncError(f"baseline module has no INDEX.md: {module}")
+        entry_points[module] = Path(target_rule_path(module, "INDEX.md"))
     return entry_points
 
 
@@ -244,43 +233,36 @@ def current_module_entry_points(manifest, modules):
     }
 
 
-def target_rule_path(module, rules, source):
+def target_rule_path(module, name):
     """The project-relative path of a rule file, as the renderer computes it."""
-    return project_render.module_rule_target(module, rules, source).as_posix()
+    return project_render.module_rule_target(module, name).as_posix()
 
 
 def baseline_snapshot(commit, module, rules):
     snapshot = {}
     for source in module_paths_from_git(commit, module, rules):
-        logical = target_rule_path(
-            module, rules, Path(source).relative_to("template")
+        snapshot[target_rule_path(module, Path(source).name)] = run_git(
+            "show", f"{commit}:{source}"
         )
-        snapshot[logical] = run_git("show", f"{commit}:{source}")
     return snapshot
 
 
-def filesystem_snapshot(root, module, rules, subject, allow_missing=False):
+def filesystem_snapshot(directory, module, rules, subject, allow_missing=False):
     """One module's rule files, keyed by where they belong in a project.
 
-    `rules` names them on disk, which is the manifest's path under the kit's
-    template and the module key inside a project. The key of the returned
-    mapping is always the project-relative path, so the baseline, project and
-    kit snapshots can be compared against each other. `rules` is None for a
-    module that ships only skills, which has no rule files to read.
+    `directory` is where the files sit: `modules/<key>/rules/` inside the kit,
+    `rules/<key>/` inside a project. The key of the returned mapping is always
+    the project-relative path, so the baseline, project and kit snapshots can be
+    compared against each other. `rules` is None for a module that ships only
+    skills, which has no rule files to read.
     """
     if rules is None:
         return {}
 
-    single = root / "rules" / f"{rules}.md"
-    directory = root / "rules" / rules
-    if single.exists() and directory.exists():
-        raise SyncError(f"{subject} has both file and directory forms: {module}")
-    if single.is_symlink() or directory.is_symlink():
+    if directory.is_symlink():
         raise SyncError(f"{subject} module must not be a symlink: {module}")
 
-    if single.is_file():
-        paths = [single]
-    elif directory.is_dir():
+    if directory.is_dir():
         paths = sorted(directory.glob("*.md"))
         if any(path.is_symlink() for path in paths):
             raise SyncError(f"{subject} module contains a symlink: {module}")
@@ -291,8 +273,7 @@ def filesystem_snapshot(root, module, rules, subject, allow_missing=False):
 
     snapshot = {}
     for path in paths:
-        logical = target_rule_path(module, rules, path.relative_to(root))
-        snapshot[logical] = path.read_bytes()
+        snapshot[target_rule_path(module, path.name)] = path.read_bytes()
     return snapshot
 
 
@@ -315,10 +296,17 @@ def compare_module(state, module):
         state.baseline_commit, module, state.baseline_rules(module)
     )
     project = filesystem_snapshot(
-        state.target, module, module, "project", allow_missing=True
+        state.target / "rules" / module,
+        module,
+        state.current_rules(module),
+        "project",
+        allow_missing=True,
     )
     kit = filesystem_snapshot(
-        KIT / "template", module, state.current_rules(module), "current kit"
+        KIT / "template" / "modules" / module / "rules",
+        module,
+        state.current_rules(module),
+        "current kit",
     )
     return Comparison(
         "module",

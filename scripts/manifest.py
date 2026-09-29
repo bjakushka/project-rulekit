@@ -90,42 +90,42 @@ def heading(path, level="##"):
     return found[1]
 
 
-def entry_point(root, rules):
-    """Where a module's rules start, or None when it has none.
+def module_root(key):
+    """Where one module's files live: `modules/<key>/`."""
+    return Path("modules") / key
 
-    `rules` is the manifest's path to them, without an extension: the script
-    looks at what is on disk. A directory is a composite module and starts at
-    its `INDEX.md`; otherwise the module is a single file, `<rules>.md`.
+
+def entry_point(root, key, rules):
+    """Where a module's rules start, or None when it ships none.
+
+    Every module is composite: its rules are a directory that starts at
+    `INDEX.md`. `rules` says whether the module has any.
     """
     if rules is None:
         return None
-    if (root / "rules" / rules).is_dir():
-        return Path("rules") / rules / "INDEX.md"
-    return Path("rules") / f"{rules}.md"
+    return module_root(key) / "rules" / "INDEX.md"
 
 
-def rule_files(root, rules):
+def rule_files(root, key, rules):
     """The rules files of one module, found on disk, not by reading them.
 
-    A composite module is its whole directory: every `.md` in it belongs to
-    the module. `@` imports are how the model pulls the parts together, and
-    the scripts have no business following them - the manifest and the disk
-    are their source of truth.
+    A module's rules are its whole `rules/` directory: every `.md` in it
+    belongs to the module. `@` imports are how the model pulls the parts
+    together, and the scripts have no business following them - the manifest
+    and the disk are their source of truth.
     """
     if rules is None:
         return []
-    directory = root / "rules" / rules
-    if directory.is_dir():
-        return sorted(p.relative_to(root) for p in directory.glob("*.md"))
-    return [Path("rules") / f"{rules}.md"]
+    directory = root / module_root(key) / "rules"
+    return sorted(p.relative_to(root) for p in directory.glob("*.md"))
 
 
-def module_files(module, root=TEMPLATE):
+def module_files(key, module, root=TEMPLATE):
     """Every file a module contributes, as (kind, relative path) pairs."""
-    for rel in rule_files(root, module["rules"]):
+    for rel in rule_files(root, key, module["rules"]):
         yield "rules", rel
     for name in module["scaffold"]:
-        yield "scaffold", Path(name)
+        yield "scaffold", module_root(key) / "scaffold" / name
     for name in module["skills"]:
         yield "skills", Path(name)
 
@@ -162,7 +162,7 @@ def cmd_list(manifest):
 
         suffix = f"  [{', '.join(flags)}]" if flags else ""
         print(f"{key}{suffix}")
-        entry = entry_point(TEMPLATE, module.get("rules"))
+        entry = entry_point(TEMPLATE, key, module.get("rules"))
         if entry is not None:
             print(f"    source: {(Path('template') / entry).as_posix()}")
         if desc:
@@ -262,17 +262,15 @@ def check_keys(manifest, problems):
                     f"{key}: has no rules, so `load` must be `null`"
                 )
             continue
-        directory = TEMPLATE / "rules" / rules
-        if directory.is_dir():
-            if not (directory / "INDEX.md").is_file():
-                problems.append(
-                    f"{key}: `rules/{rules}/` is a composite module, so it must "
-                    "contain an `INDEX.md` as its entry point"
-                )
-        elif not (TEMPLATE / "rules" / f"{rules}.md").is_file():
+        directory = TEMPLATE / module_root(key) / "rules"
+        if not directory.is_dir():
             problems.append(
-                f"{key}: `rules` resolves to neither `rules/{rules}.md` nor a "
-                f"directory `rules/{rules}/`"
+                f"{key}: declares rules but has no `{module_root(key)}/rules/`"
+            )
+        elif not (directory / "INDEX.md").is_file():
+            problems.append(
+                f"{key}: `{module_root(key)}/rules/` must contain an `INDEX.md` "
+                "as its entry point"
             )
         if module.get("load") is None:
             problems.append(f"{key}: has rules, so `load` must not be `null`")
@@ -286,7 +284,7 @@ def check_files(manifest, problems):
     """
     owned = set()
     for key, module in manifest.get("modules", {}).items():
-        for _, rel in module_files(module):
+        for _, rel in module_files(key, module):
             if not (TEMPLATE / rel).exists():
                 problems.append(f"{key}: `{rel}` does not exist")
             owned.add(rel)
@@ -316,8 +314,8 @@ def check_modules(manifest, problems):
     they would come to mean different things.
     """
     for key, module in manifest.get("modules", {}).items():
-        entry = entry_point(TEMPLATE, module.get("rules"))
-        for rel in rule_files(TEMPLATE, module.get("rules")):
+        entry = entry_point(TEMPLATE, key, module.get("rules"))
+        for rel in rule_files(TEMPLATE, key, module.get("rules")):
             path = TEMPLATE / rel
             if not path.is_file():
                 continue
