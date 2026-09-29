@@ -211,7 +211,7 @@ def check_key_order(value, path, problems):
 
 
 def check_schema(manifest, problems):
-    for section in ("core", "modules", "paths", "values"):
+    for section in ("core", "modules", "values"):
         if section not in manifest:
             problems.append(f"manifest: missing top-level section `{section}`")
 

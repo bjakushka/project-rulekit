@@ -71,11 +71,6 @@
       "required": true
     }
   },
-  "paths": {
-    "hooks": ".claude/hooks/",
-    "rules": "rules/",
-    "skills": ".claude/skills/"
-  },
   "values": {
     "CONVERSATION_LANGUAGE": {
       "choices": null,
