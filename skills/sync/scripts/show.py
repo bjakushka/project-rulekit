@@ -98,7 +98,7 @@ def main():
     for path in logical_paths:
         print(f"- `{path}`")
         print(f"  - project: `{state.target / path}`")
-        print(f"  - kit template: `{detect.KIT / 'template' / path}`")
+        print(f"  - kit source: `{detect.kit_source_path(path)}`")
     for heading, content in sections:
         print(f"\n## {heading}\n")
         print(content)

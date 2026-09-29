@@ -119,8 +119,8 @@ reported project-context candidate. Read task-intake candidates and only files
 needed to understand the project or support a material inference. Accept the
 scanner's existence and repository-topology facts without re-checking them.
 
-Read `${CLAUDE_PLUGIN_ROOT}/template/CLAUDE.md`,
-`${CLAUDE_PLUGIN_ROOT}/template/PROJECT.tmpl.md`, and the reported entry point of
+Read `${CLAUDE_PLUGIN_ROOT}/core/CLAUDE.md`,
+`${CLAUDE_PLUGIN_ROOT}/core/PROJECT.tmpl.md`, and the reported entry point of
 every available module. Use only paths returned by `manifest.py list`; follow
 imports from an entry point with `Read`. Do not enumerate the catalogue with
 `find`, `ls -R`, or similar commands.

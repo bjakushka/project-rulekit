@@ -42,7 +42,7 @@ class SyncState:
     def has_rules(self, module):
         """Whether the module ships rules, read from the kit's own layout."""
         return (
-            KIT / "template" / "modules" / module / "rules"
+            KIT / "modules" / module / "rules"
         ).is_dir()
 
 
@@ -188,10 +188,10 @@ def module_paths_from_git(commit, module, has_rules):
         "--name-only",
         commit,
         "--",
-        f"template/modules/{module}/rules",
+        f"modules/{module}/rules",
         text=True,
     )
-    directory = f"template/modules/{module}/rules/"
+    directory = f"modules/{module}/rules/"
     paths = [
         path
         for path in output.splitlines()
@@ -210,7 +210,7 @@ def module_entry_points_from_git(commit, modules, has_rules_of):
         if not has_rules_of(module):
             continue
         paths = module_paths_from_git(commit, module, True)
-        if f"template/modules/{module}/rules/INDEX.md" not in paths:
+        if f"modules/{module}/rules/INDEX.md" not in paths:
             raise SyncError(f"baseline module has no INDEX.md: {module}")
         entry_points[module] = Path(target_rule_path(module, "INDEX.md"))
     return entry_points
@@ -222,6 +222,18 @@ def current_module_entry_points(manifest, modules):
         module: project_render.module_entry_point(KIT, module)
         for module in modules
     }
+
+
+def kit_source_path(logical):
+    """Where a project-relative path comes from inside the kit.
+
+    A module's rules live under `modules/<key>/rules/`, while a core file keeps
+    its own name under `core/`.
+    """
+    parts = Path(logical).parts
+    if parts[:1] == ("rules",) and len(parts) >= 3:
+        return KIT / "modules" / parts[1] / "rules" / Path(*parts[2:])
+    return KIT / "core" / logical
 
 
 def target_rule_path(module, name):
@@ -296,7 +308,7 @@ def compare_module(state, module):
         allow_missing=True,
     )
     kit = filesystem_snapshot(
-        KIT / "template" / "modules" / module / "rules",
+        KIT / "modules" / module / "rules",
         module,
         state.has_rules(module),
         "current kit",
@@ -363,7 +375,7 @@ def baseline_core_snapshot(state, commit=None):
     try:
         template = run_git(
             "show",
-            f"{commit}:template/CLAUDE.md",
+            f"{commit}:core/CLAUDE.md",
         ).decode("utf-8")
     except UnicodeDecodeError as error:
         raise SyncError("baseline core template is not UTF-8 text") from error
@@ -379,7 +391,7 @@ def baseline_core_snapshot(state, commit=None):
 def current_core_snapshot(state):
     manifest = read_json(KIT / "manifest.json", "current manifest")
     try:
-        template = (KIT / "template" / "CLAUDE.md").read_text(encoding="utf-8")
+        template = (KIT / "core" / "CLAUDE.md").read_text(encoding="utf-8")
     except UnicodeDecodeError as error:
         raise SyncError("current core template is not UTF-8 text") from error
     return rendered_core_snapshot(

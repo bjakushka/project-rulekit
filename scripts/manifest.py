@@ -33,7 +33,8 @@ def find_kit_root(start):
 
 KIT = find_kit_root(Path(__file__).resolve().parent)
 MANIFEST = KIT / "manifest.json"
-TEMPLATE = KIT / "template"
+CORE = KIT / "core"
+MODULES = KIT / "modules"
 
 MODULE_FIELDS = {
     "description": (str,),
@@ -89,8 +90,8 @@ def heading(path, level="##"):
 
 
 def module_root(key):
-    """Where one module's files live: `modules/<key>/`."""
-    return Path("modules") / key
+    """Where one module's files live, relative to `modules/`."""
+    return Path(key)
 
 
 def has_rules(root, key):
@@ -133,7 +134,7 @@ def kind_files(root, key, kind):
     )
 
 
-def module_files(key, root=TEMPLATE):
+def module_files(key, root=MODULES):
     """Every file a module contributes, as (kind, relative path) pairs."""
     for kind in KIND_DIRECTORIES:
         for rel in kind_files(root, key, kind):
@@ -172,9 +173,9 @@ def cmd_list(manifest):
 
         suffix = f"  [{', '.join(flags)}]" if flags else ""
         print(f"{key}{suffix}")
-        entry = entry_point(TEMPLATE, key)
+        entry = entry_point(MODULES, key)
         if entry is not None:
-            print(f"    source: {(Path('template') / entry).as_posix()}")
+            print(f"    source: {(Path('modules') / entry).as_posix()}")
         if desc:
             print(f"    {desc}")
     return 0
@@ -260,7 +261,7 @@ def check_keys(manifest, problems):
     module. `load` is null exactly when the module ships no rules.
     """
     for key, module in manifest.get("modules", {}).items():
-        root = TEMPLATE / module_root(key)
+        root = MODULES / module_root(key)
         if not root.is_dir():
             problems.append(f"{key}: has no `{module_root(key)}/` directory")
             continue
@@ -282,13 +283,13 @@ def check_keys(manifest, problems):
                 "nothing"
             )
 
-        for rel in kind_files(TEMPLATE, key, "rules"):
+        for rel in kind_files(MODULES, key, "rules"):
             if rel.suffix != ".md":
                 problems.append(
                     f"{key}: `{rel}` is under `rules/` but is not Markdown"
                 )
 
-        if not has_rules(TEMPLATE, key):
+        if not has_rules(MODULES, key):
             if module.get("load") is not None:
                 problems.append(
                     f"{key}: has no rules, so `load` must be `null`"
@@ -305,38 +306,39 @@ def check_keys(manifest, problems):
 
 
 def check_files(manifest, problems):
-    """Every file under template/ belongs to a declared module or to core.
+    """Every payload file belongs to a declared module or to core.
 
-    Membership is a prefix test rather than a list of declared paths: a file
-    under `modules/<key>/` belongs to that module whatever its extension, so a
-    skill's scripts and references are covered as well as its Markdown.
+    Under `modules/` membership is a prefix test rather than a list of declared
+    paths: a file under `<key>/` belongs to that module whatever its extension,
+    so a skill's scripts and references are covered as well as its Markdown.
+    `core/` holds exactly the files the manifest names.
     """
-    declared = set(manifest.get("modules", {}))
-
-    for name in manifest.get("core", {}).get("rules", []) + manifest.get(
-        "core", {}
-    ).get("scaffold", []):
-        if not (TEMPLATE / name).exists():
-            problems.append(f"core: `{name}` does not exist")
-
     core_files = {
         Path(name)
         for section in ("rules", "scaffold")
         for name in manifest.get("core", {}).get(section, [])
     }
+    for name in sorted(core_files):
+        if not (CORE / name).exists():
+            problems.append(f"core: `{name}` does not exist")
 
-    for path in sorted(TEMPLATE.rglob("*")):
+    for path in sorted(CORE.rglob("*")):
+        if path.is_file() and path.relative_to(CORE) not in core_files:
+            problems.append(
+                f"`core/{path.relative_to(CORE)}` is not named by the manifest"
+            )
+
+    declared = set(manifest.get("modules", {}))
+    for path in sorted(MODULES.rglob("*")):
         if not path.is_file():
             continue
-        rel = path.relative_to(TEMPLATE)
-        if rel in core_files:
-            continue
+        rel = path.relative_to(MODULES)
         parts = rel.parts
-        if parts[:1] != ("modules",) or len(parts) < 3:
-            problems.append(f"`{rel}` is in template/ but nothing owns it")
-        elif parts[1] not in declared:
+        if len(parts) < 2:
+            problems.append(f"`modules/{rel}` belongs to no module")
+        elif parts[0] not in declared:
             problems.append(
-                f"`{rel}` is under `modules/{parts[1]}/`, which the manifest "
+                f"`modules/{rel}` is under `{parts[0]}/`, which the manifest "
                 "does not declare"
             )
 
@@ -354,9 +356,9 @@ def check_modules(manifest, problems):
     they would come to mean different things.
     """
     for key, module in manifest.get("modules", {}).items():
-        entry = entry_point(TEMPLATE, key)
-        for rel in rule_files(TEMPLATE, key):
-            path = TEMPLATE / rel
+        entry = entry_point(MODULES, key)
+        for rel in rule_files(MODULES, key):
+            path = MODULES / rel
             if not path.is_file():
                 continue
             want = "##" if rel == entry else "###"
@@ -374,14 +376,14 @@ def check_modules(manifest, problems):
         if not described:
             problems.append(f"{key}: `description` must not be empty")
         elif entry is not None:
-            found = heading(TEMPLATE / entry)
+            found = heading(MODULES / entry)
             if found is not None and found != described:
                 problems.append(
                     f"{key}: `description` and the `{entry}` heading differ: "
                     f"`{described}` against `{found}`"
                 )
 
-        for rel in kind_files(TEMPLATE, key, "scaffold"):
+        for rel in kind_files(MODULES, key, "scaffold"):
             if not rel.name.endswith(".tmpl.md"):
                 problems.append(
                     f"{key}: scaffold `{rel}` is missing the `.tmpl` suffix"

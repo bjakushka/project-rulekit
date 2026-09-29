@@ -68,7 +68,8 @@ def kit_version(kit_root):
         "--untracked-files=all",
         "--",
         "manifest.json",
-        "template",
+        "core",
+        "modules",
     ).rstrip("\n")
     paths = sorted(line[3:] for line in changed.splitlines() if line)
     commit = run_git(kit_root, "rev-parse", "--verify", "HEAD").strip()
@@ -294,7 +295,7 @@ def specification_problems(
 
 def module_source_root(kit_root, module):
     """Where one module's files live inside the kit."""
-    return kit_root / "template" / "modules" / module
+    return kit_root / "modules" / module
 
 
 def module_has_rules(kit_root, module):
@@ -385,7 +386,7 @@ def render_claude_text(
             2,
             "failed to render CLAUDE.md",
             "the template must contain exactly one complete `kit:imports` block",
-            "restore or fix template/CLAUDE.md, then retry",
+            "restore or fix core/CLAUDE.md, then retry",
         )
     return text, rendered_values
 
@@ -498,7 +499,7 @@ def render_project(template, draft, rendered_values):
                 2,
                 "failed to render PROJECT.md",
                 f"the template must contain exactly one `{marker}` marker",
-                "restore or fix template/PROJECT.tmpl.md, then retry",
+                "restore or fix core/PROJECT.tmpl.md, then retry",
             )
         text = text.replace(marker, block)
 
@@ -564,7 +565,7 @@ def render_tree(
 
     claude, values = render_claude(
         kit_root,
-        kit_root / "template" / "CLAUDE.md",
+        kit_root / "core" / "CLAUDE.md",
         draft["modules"],
         draft["values"],
         module_declarations,
@@ -573,7 +574,7 @@ def render_tree(
     (destination / "CLAUDE.md").write_text(claude, encoding="utf-8")
 
     project = render_project(
-        kit_root / "template" / "PROJECT.tmpl.md",
+        kit_root / "core" / "PROJECT.tmpl.md",
         draft,
         values,
     )
