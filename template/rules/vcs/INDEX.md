@@ -6,4 +6,5 @@
 - Read-only inspection (status, diff, log, show) is fine without asking
 - Before any repo operation, check the current directory and repo status
 
+@commits.md
 @layout.md
