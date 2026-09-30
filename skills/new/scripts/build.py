@@ -360,8 +360,9 @@ def cmd_prepare(raw_target):
 
     reason = (
         "rendered CLAUDE.md and PROJECT.md, copied "
-        f"{rendered['copied_rules']} rule file(s) and "
-        f"{rendered['copied_scaffolds']} scaffold file(s), created "
+        f"{rendered['copied_rules']} rule file(s), "
+        f"{rendered['copied_scaffolds']} scaffold file(s) and "
+        f"{rendered['copied_skills']} skill file(s), created "
         f"{rendered['repositories']} inner repository directory(s), and wrote "
         ".kit.json"
     )

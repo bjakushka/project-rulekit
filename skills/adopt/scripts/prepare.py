@@ -145,7 +145,8 @@ def prepare(raw_target):
     reason = (
         "rendered a clean Rulekit base with "
         f"{rendered['copied_rules']} rule file(s), "
-        f"{rendered['copied_scaffolds']} scaffold file(s), and "
+        f"{rendered['copied_scaffolds']} scaffold file(s), "
+        f"{rendered['copied_skills']} skill file(s), and "
         f"{rendered['repositories']} inner repository directory(s)"
     )
     next_step = "inspect the preview before reconciling existing project content"

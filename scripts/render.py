@@ -15,6 +15,7 @@ IMPORTS_START = "<!-- kit:imports -->"
 IMPORTS_END = "<!-- /kit:imports -->"
 PLACEHOLDER = re.compile(r"{{([A-Z][A-Z0-9_]*)}}")
 RESERVED_TARGET_PATHS = (
+    ".claude",
     ".git",
     ".gitignore",
     ".kit-preview",
@@ -320,9 +321,28 @@ def module_scaffold_files(kit_root, module):
     )
 
 
+def module_skill_files(kit_root, module):
+    """A module's skill files, as paths relative to its `skills/`.
+
+    A skill is a directory, so everything under it belongs to the skill: its
+    `SKILL.md`, references and scripts alike.
+    """
+    root = module_source_root(kit_root, module) / "skills"
+    if not root.is_dir():
+        return []
+    return sorted(
+        p.relative_to(root) for p in root.rglob("*") if p.is_file()
+    )
+
+
 def module_rule_target(module, name):
     """Where a module's rule file lands in a project: `rules/<module>/<name>`."""
     return Path("rules") / module / name
+
+
+def module_skill_target(name):
+    """Where a module's skill file lands: `.claude/skills/<name>`."""
+    return Path(".claude") / "skills" / name
 
 
 def module_entry_point(kit_root, module):
@@ -614,6 +634,22 @@ def render_tree(
             shutil.copyfile(source, output)
             copied_scaffolds += 1
 
+    copied_skills = 0
+    for module in draft["modules"]:
+        for name in module_skill_files(kit_root, module):
+            source = module_source_root(kit_root, module) / "skills" / name
+            output = destination / module_skill_target(name)
+            if output.exists():
+                raise ProjectError(
+                    2,
+                    "failed to prepare module skill",
+                    f"two modules install the same skill file: {name}",
+                    "rename one of the skills so every installed path is unique",
+                )
+            output.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, output)
+            copied_skills += 1
+
     state = {
         "kit": {"commit": kit_commit},
         "modules": sorted(draft["modules"]),
@@ -626,6 +662,7 @@ def render_tree(
     return {
         "copied_rules": copied_rules,
         "copied_scaffolds": copied_scaffolds,
+        "copied_skills": copied_skills,
         "repositories": len(repositories),
         "uses_git": uses_git,
     }
