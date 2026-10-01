@@ -46,6 +46,12 @@
       "load": "always",
       "required": true
     },
+    "reflect": {
+      "description": "Reflect: review a session and propose what to keep",
+      "group": null,
+      "load": null,
+      "required": false
+    },
     "secrets": {
       "description": "Secrets: what must never be written into the project",
       "group": null,
