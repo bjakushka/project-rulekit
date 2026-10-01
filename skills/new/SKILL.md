@@ -8,6 +8,7 @@ allowed-tools:
   - 'Skill(rulekit:postreview *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/manifest.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/answers.py" *)'
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/visibility.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/check-target.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/init-repositories.py" *)'
@@ -193,14 +194,14 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/new/scripts/build.py" --target "<target>" 
 Stop if preparation fails. Do not replace, repair, or remove preview files by
 hand.
 
-When preparation succeeds, report the resolved target, answers file path,
-preview path, exact selected modules and values, the skills the script reports
-as installed, concise project context, and inner repositories. State that the
-generated files are ready for inspection inside `.kit-preview/files` but have
-not been applied to the project root.
-
-Use `AskUserQuestion` to ask whether to apply the preview and, for Git projects,
-initialize the outer and inner repositories now, or inspect the preview first.
+When preparation succeeds, use `AskUserQuestion` to ask whether to apply the
+preview and, for Git projects, initialize the outer and inner repositories now,
+or inspect the preview first. Write the preparation report into the question
+text itself, so the user decides with it in view: the resolved target, answers
+file path, preview path, exact selected modules and values, the skills the
+script reports as installed, concise project context, and inner repositories.
+State there that the generated files are ready for inspection inside
+`.kit-preview/files` but have not been applied to the project root.
 Put the apply option first and apply only when the user selects it. If the user
 requests inspection, preserve the preview, show it with an available review
 method, then ask the same question again. Do not assume that revdiff or any
@@ -227,12 +228,24 @@ Use exactly the repository paths accepted in the confirmed brief. Stop and
 report the script output if repository initialization fails. Do not create a
 missing directory or repair a repository by hand.
 
-When application succeeds, report the resolved target and the exact selected
-modules, values, and inner repositories. State that the generated files and
-directories, including the finished `PROJECT.md`, were applied, the temporary
-`.kit-preview` workspace was removed, and whether Git repositories were
-initialized or preserved. When skills were installed, name them and say in one
-sentence that they become available in the next session opened in the project.
+For Git projects, then ask Git whether it sees every file Rulekit created:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/visibility.py" --target "<target>"
+```
+
+Its outcome never stops project creation.
+
+When application succeeds, write the summary as visible text in your reply
+before starting the review below; do not leave it to your own reasoning. Report
+the resolved target and the exact selected modules, values, installed skills,
+and inner repositories. State that the generated files and directories,
+including the finished `PROJECT.md`, were applied, the temporary `.kit-preview`
+workspace was removed, and whether Git repositories were initialized or
+preserved. When the visibility check did not exit cleanly, add one plain
+sentence naming the files Git does not see, or the check's failure, without
+guessing the cause. Put it among the other facts, not at the end, and do not
+emphasise it.
 
 Then invoke `rulekit:postreview` through the Skill tool with the resolved
 target as its only argument. This is the final stage of project creation; do
