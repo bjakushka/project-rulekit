@@ -67,14 +67,19 @@ def finalize(raw_target):
             "project and Rulekit content still differs: " + ", ".join(unmatched)
         )
 
-    uncommitted = [
-        comparison.name
-        for comparison in comparisons
-        if comparison.kit
-        != detect.baseline_snapshot(
-            head, comparison.name, state.has_rules(comparison.name)
+    uncommitted = []
+    for comparison in comparisons:
+        module = comparison.name
+        committed = detect.baseline_snapshot(
+            head, module, state.has_rules(module)
         )
-    ]
+        committed.update(
+            detect.skill_baseline_snapshot(
+                head, module, state.owned_skills(module)
+            )
+        )
+        if comparison.kit != committed:
+            uncommitted.append(module)
     if core.kit != detect.baseline_core_snapshot(state, commit=head):
         uncommitted.insert(0, "rendered-core")
     if uncommitted:

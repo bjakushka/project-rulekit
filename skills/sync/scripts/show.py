@@ -98,7 +98,8 @@ def main():
     for path in logical_paths:
         print(f"- `{path}`")
         print(f"  - project: `{state.target / path}`")
-        print(f"  - kit source: `{detect.kit_source_path(path)}`")
+        owner = None if comparison.kind == "core" else comparison.name
+        print(f"  - kit source: `{detect.kit_source_path(path, owner)}`")
     for heading, content in sections:
         print(f"\n## {heading}\n")
         print(content)

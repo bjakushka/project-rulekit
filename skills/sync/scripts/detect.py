@@ -41,9 +41,14 @@ class SyncState:
 
     def has_rules(self, module):
         """Whether the module ships rules, read from the kit's own layout."""
-        return (
-            KIT / "modules" / module / "rules"
-        ).is_dir()
+        return (KIT / "modules" / module / "rules").is_dir()
+
+    def owned_skills(self, module):
+        """The skill directories this module installs, by name."""
+        root = KIT / "modules" / module / "skills"
+        if not root.is_dir():
+            return ()
+        return tuple(sorted(p.name for p in root.iterdir() if p.is_dir()))
 
 
 @dataclass(frozen=True)
@@ -224,15 +229,17 @@ def current_module_entry_points(manifest, modules):
     }
 
 
-def kit_source_path(logical):
+def kit_source_path(logical, module=None):
     """Where a project-relative path comes from inside the kit.
 
-    A module's rules live under `modules/<key>/rules/`, while a core file keeps
-    its own name under `core/`.
+    A module's rules live under `modules/<key>/rules/` and its skills under
+    `modules/<key>/skills/`, while a core file keeps its own name under `core/`.
     """
     parts = Path(logical).parts
     if parts[:1] == ("rules",) and len(parts) >= 3:
         return KIT / "modules" / parts[1] / "rules" / Path(*parts[2:])
+    if parts[:2] == (".claude", "skills") and module is not None:
+        return KIT / "modules" / module / "skills" / Path(*parts[2:])
     return KIT / "core" / logical
 
 
@@ -294,6 +301,57 @@ def classify(baseline, project, kit):
     return "diverged"
 
 
+def skill_target_path(name):
+    """Where a skill file lands in a project, as the renderer computes it."""
+    return project_render.module_skill_target(name).as_posix()
+
+
+def skill_paths_from_git(commit, module, skills):
+    """The baseline's files for the skill directories a module owns."""
+    if not skills:
+        return []
+    output = run_git(
+        "ls-tree", "-r", "--name-only", commit,
+        "--", f"modules/{module}/skills", text=True,
+    )
+    prefixes = tuple(f"modules/{module}/skills/{name}/" for name in skills)
+    return [path for path in output.splitlines() if path.startswith(prefixes)]
+
+
+def skill_baseline_snapshot(commit, module, skills):
+    snapshot = {}
+    for source in skill_paths_from_git(commit, module, skills):
+        inner = Path(source).relative_to(f"modules/{module}/skills")
+        content = run_git("show", f"{commit}:{source}")
+        snapshot[skill_target_path(inner)] = content
+    return snapshot
+
+
+def skill_filesystem_snapshot(root, module, skills, subject):
+    """One module's skill files, keyed by where they belong in a project.
+
+    Only the skill directories the module owns are read, so a project-local
+    skill sitting beside them never enters the comparison.
+    """
+    snapshot = {}
+    for name in skills:
+        directory = root / name
+        if not directory.is_dir():
+            continue
+        if directory.is_symlink():
+            raise SyncError(f"{subject} skill must not be a symlink: {name}")
+        for path in sorted(directory.rglob("*")):
+            if not path.is_file():
+                continue
+            if path.is_symlink():
+                raise SyncError(
+                    f"{subject} skill contains a symlink: {module}/{name}"
+                )
+            inner = Path(name) / path.relative_to(directory)
+            snapshot[skill_target_path(inner)] = path.read_bytes()
+    return snapshot
+
+
 def compare_module(state, module):
     if module not in state.modules:
         raise SyncError(f"module is not selected by the project: {module}")
@@ -313,6 +371,22 @@ def compare_module(state, module):
         state.has_rules(module),
         "current kit",
     )
+
+    skills = state.owned_skills(module)
+    baseline.update(
+        skill_baseline_snapshot(state.baseline_commit, module, skills)
+    )
+    project.update(
+        skill_filesystem_snapshot(
+            state.target / ".claude" / "skills", module, skills, "project"
+        )
+    )
+    kit.update(
+        skill_filesystem_snapshot(
+            KIT / "modules" / module / "skills", module, skills, "current kit"
+        )
+    )
+
     return Comparison(
         "module",
         module,
