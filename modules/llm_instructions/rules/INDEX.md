@@ -29,6 +29,11 @@ Verified by experiment, matches the Claude Code documentation.
   persistent data, the session id, the effort level, and the invocation
   arguments. They are substituted in the skill body and in its `allowed-tools`
   Bash rules. Look up the current names before using one
+- Skills are discovered when a session starts, so one added to a running
+  session is not listed until the next one
+- A personal skill shadows a project skill of the same name, and an enterprise
+  one shadows both. A module's skill can therefore be silently replaced by a
+  same-named skill in the owner's own directory
 - A skill's `description` accepts a folded YAML scalar across several lines,
   not only a single long line. The documentation shows single-line examples
   only, but the folded form is confirmed by use: a skill written that way is
