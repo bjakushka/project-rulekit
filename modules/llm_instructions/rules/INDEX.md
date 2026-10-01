@@ -23,3 +23,13 @@ Verified by experiment, matches the Claude Code documentation.
 - Anything the model must act on goes in the visible body of the file
 - Some tools, Codex among them, do not resolve `@` imports at all. The base
   `CLAUDE.md` therefore also says in words that the listed files must be read
+- A skill reaches its own files through harness variables, never a written-out
+  path that only works from one working directory. There are variables for the
+  skill's own directory, the project root, the plugin directory and its
+  persistent data, the session id, the effort level, and the invocation
+  arguments. They are substituted in the skill body and in its `allowed-tools`
+  Bash rules. Look up the current names before using one
+- A skill's `description` accepts a folded YAML scalar across several lines,
+  not only a single long line. The documentation shows single-line examples
+  only, but the folded form is confirmed by use: a skill written that way is
+  listed and invoked normally
