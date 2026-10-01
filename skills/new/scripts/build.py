@@ -368,6 +368,10 @@ def cmd_prepare(raw_target):
     )
     if rendered["uses_git"]:
         reason += " and .gitignore"
+    if rendered["installed_skills"]:
+        reason += (
+            "; installed skills: " + ", ".join(rendered["installed_skills"])
+        )
     next_step = "inspect the exact preview before applying it"
     if changed_sources:
         reason += (

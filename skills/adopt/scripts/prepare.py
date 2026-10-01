@@ -149,6 +149,10 @@ def prepare(raw_target):
         f"{rendered['copied_skills']} skill file(s), and "
         f"{rendered['repositories']} inner repository directory(s)"
     )
+    if rendered["installed_skills"]:
+        reason += (
+            "; installed skills: " + ", ".join(rendered["installed_skills"])
+        )
     next_step = "inspect the preview before reconciling existing project content"
     if changed_sources:
         reason += (

@@ -194,9 +194,10 @@ Stop if preparation fails. Do not replace, repair, or remove preview files by
 hand.
 
 When preparation succeeds, report the resolved target, answers file path,
-preview path, exact selected modules and values, concise project context, and
-inner repositories. State that the generated files are ready for inspection
-inside `.kit-preview/files` but have not been applied to the project root.
+preview path, exact selected modules and values, the skills the script reports
+as installed, concise project context, and inner repositories. State that the
+generated files are ready for inspection inside `.kit-preview/files` but have
+not been applied to the project root.
 
 Use `AskUserQuestion` to ask whether to apply the preview and, for Git projects,
 initialize the outer and inner repositories now, or inspect the preview first.
@@ -230,7 +231,8 @@ When application succeeds, report the resolved target and the exact selected
 modules, values, and inner repositories. State that the generated files and
 directories, including the finished `PROJECT.md`, were applied, the temporary
 `.kit-preview` workspace was removed, and whether Git repositories were
-initialized or preserved.
+initialized or preserved. When skills were installed, name them and say in one
+sentence that they become available in the next session opened in the project.
 
 Then invoke `rulekit:postreview` through the Skill tool with the resolved
 target as its only argument. This is the final stage of project creation; do

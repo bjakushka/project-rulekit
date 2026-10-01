@@ -635,6 +635,7 @@ def render_tree(
             copied_scaffolds += 1
 
     copied_skills = 0
+    installed_skills = set()
     for module in draft["modules"]:
         for name in module_skill_files(kit_root, module):
             source = module_source_root(kit_root, module) / "skills" / name
@@ -647,8 +648,10 @@ def render_tree(
                     "rename one of the skills so every installed path is unique",
                 )
             output.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, output)
+            # Keep the mode: a skill may run its scripts directly.
+            shutil.copy(source, output)
             copied_skills += 1
+            installed_skills.add(Path(name).parts[0])
 
     state = {
         "kit": {"commit": kit_commit},
@@ -663,6 +666,7 @@ def render_tree(
         "copied_rules": copied_rules,
         "copied_scaffolds": copied_scaffolds,
         "copied_skills": copied_skills,
+        "installed_skills": sorted(installed_skills),
         "repositories": len(repositories),
         "uses_git": uses_git,
     }
