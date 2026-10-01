@@ -91,6 +91,11 @@ def main():
     else:
         print(f"Module: `{comparison.name}`")
     print(f"Status: `{comparison.status}`")
+    for name in comparison.collisions:
+        print(
+            f"Collision: the project already has its own "
+            f"`.claude/skills/{name}/`, which this module would install"
+        )
     print("\nFiles:")
     logical_paths = sorted(
         set(comparison.baseline) | set(comparison.project) | set(comparison.kit)

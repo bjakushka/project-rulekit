@@ -10,6 +10,7 @@ allowed-tools:
   - Edit
   - Read
   - Write
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/visibility.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/detect.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/finalize.py" *)'
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/show.py" *)'
@@ -56,6 +57,7 @@ The script reports only items that differ. Interpret its statuses as:
 - `kit-only`: only Rulekit changed from baseline
 - `converged`: project and Rulekit contain the same change from baseline
 - `diverged`: both changed and no longer match each other
+- `collision`: a skill new since baseline reuses a project-local skill's name
 
 If rendered core and every selected module are unchanged, report that no sync
 is needed and stop.
@@ -94,6 +96,15 @@ Use these defaults as recommendations, never as automatic choices:
 - for `diverged`, compose a merged rule with the owner instead of choosing a
   side
 
+For `collision`, no default applies. Tell the owner the project's own skill
+sits where the module's skill installs, even when identical, and ask: replace
+it with the module's, have the owner rename it first, or stop the sync. Never
+propose merging, and write nothing there before the owner chooses.
+
+A file the baseline and project have but the current kit lacks is a removal.
+Never delete it yourself: name each path for the owner to delete, wait for
+confirmation, then recheck.
+
 Project-specific behavior does not belong in shared Rulekit core or a module.
 When a project rule expresses a portable principle with local wording,
 generalize the wording before proposing it for Rulekit.
@@ -115,14 +126,26 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/sync/scripts/detect.py" --target "<target>
 
 The flag is only for rechecking changes approved and applied during this sync
 run; never use it to bypass an initial cleanliness refusal. An item is resolved
-for this run when it is `unchanged` or `converged`. Continue with the remaining
-reported items. If the owner keeps a project-local difference, leave it
-unresolved and say that future sync runs will report it again.
+for this run when it is `unchanged` or `converged`. A `collision` is resolved
+once the owner has chosen and `show.py` shows no current-kit-to-project
+difference. Continue with the remaining reported
+items. If the owner keeps a project-local difference, leave it unresolved and
+say that future sync runs will report it again.
 
 Do not change module selection, sync scaffold files, edit `.kit.json` by hand,
 or commit either repository.
 
-When only `unchanged` or `converged` items remain, report the changed files.
+When every item is resolved for this run, check whether Git sees the files
+Rulekit manages in the project, on one physical line:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/visibility.py" --target "<target>"
+```
+
+Its outcome never stops the sync. Then report the changed files. When the
+visibility check did not exit cleanly, add one plain sentence naming the files
+Git does not see, or the check's failure, without guessing the cause. Put it
+among the other facts, not at the end, and do not emphasise it.
 If this run changed Rulekit files, name `${CLAUDE_PLUGIN_ROOT}` as the repository
 the owner must commit and use `AskUserQuestion` to wait for confirmation that
 the commit is complete. If this run changed only project files, do not request

@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -44,11 +45,30 @@ class SyncState:
         return (KIT / "modules" / module / "rules").is_dir()
 
     def owned_skills(self, module):
-        """The skill directories this module installs, by name."""
-        root = KIT / "modules" / module / "skills"
-        if not root.is_dir():
-            return ()
-        return tuple(sorted(p.name for p in root.iterdir() if p.is_dir()))
+        """The skill directories this module installs, by name.
+
+        The baseline counts as well as the current kit, so a skill the kit
+        has since dropped or renamed shows up as a kit-side removal instead
+        of turning silently into a project-local one.
+        """
+        return tuple(sorted(
+            kit_skill_names(module)
+            | committed_skill_names(self.baseline_commit, module)
+        ))
+
+    def colliding_skills(self, module):
+        """New skills of the module whose name a local skill already uses.
+
+        New means absent from the baseline, so the directory in the project
+        cannot be one the kit installed.
+        """
+        added = kit_skill_names(module) - committed_skill_names(
+            self.baseline_commit, module
+        )
+        return tuple(sorted(
+            name for name in added
+            if os.path.lexists(self.target / ".claude" / "skills" / name)
+        ))
 
 
 @dataclass(frozen=True)
@@ -59,6 +79,7 @@ class Comparison:
     baseline: dict[str, bytes]
     project: dict[str, bytes]
     kit: dict[str, bytes]
+    collisions: tuple[str, ...] = ()
 
 
 def read_json(path, subject):
@@ -86,6 +107,23 @@ def run_git_at(root, *arguments, text=False):
 
 def run_git(*arguments, text=False):
     return run_git_at(KIT, *arguments, text=text)
+
+
+def kit_skill_names(module):
+    """The skill directories a module ships in the current kit."""
+    root = KIT / "modules" / module / "skills"
+    if not root.is_dir():
+        return set()
+    return {path.name for path in root.iterdir() if path.is_dir()}
+
+
+def committed_skill_names(commit, module):
+    """The skill directories a module shipped at a kit commit."""
+    output = run_git(
+        "ls-tree", "-d", "--name-only", commit,
+        "--", f"modules/{module}/skills/", text=True,
+    )
+    return {Path(line).name for line in output.splitlines()}
 
 
 def require_clean_repository(root, subject):
@@ -387,13 +425,16 @@ def compare_module(state, module):
         )
     )
 
+    # A collision is not drift, so it outranks whatever the bytes say.
+    collisions = state.colliding_skills(module)
     return Comparison(
         "module",
         module,
-        classify(baseline, project, kit),
+        "collision" if collisions else classify(baseline, project, kit),
         baseline,
         project,
         kit,
+        collisions,
     )
 
 
@@ -556,6 +597,19 @@ def main():
         print("\nChanged modules:")
         for comparison in changed_modules:
             print(f"- `{comparison.name}` - {comparison.status}")
+
+    collisions = [
+        (comparison.name, name)
+        for comparison in changed_modules
+        for name in comparison.collisions
+    ]
+    if collisions:
+        print("\nSkill name collisions:")
+        for module, name in collisions:
+            print(
+                f"- `{module}` installs `{name}`, and the project already "
+                f"has its own `.claude/skills/{name}/`"
+            )
     return 0
 
 
