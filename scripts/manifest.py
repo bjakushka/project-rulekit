@@ -176,6 +176,11 @@ def cmd_list(manifest):
         entry = entry_point(MODULES, key)
         if entry is not None:
             print(f"    source: {(Path('modules') / entry).as_posix()}")
+        skills_root = MODULES / key / "skills"
+        if skills_root.is_dir():
+            names = sorted(p.name for p in skills_root.iterdir() if p.is_dir())
+            if names:
+                print(f"    skills: {', '.join(names)}")
         if desc:
             print(f"    {desc}")
     return 0

@@ -145,7 +145,8 @@ For every module, state selection separately as `required`, `selected`, or `not
 selected`. For a required group choice, use `selected from required group`.
 State fit separately as `exact`, `strong`, `unresolved`, `conflict`, or `not
 established`. Do not call fit `exact` merely because the module is required or
-a similarly named file exists.
+a similarly named file exists. A local skill named like a module's skill in
+`manifest.py list` is evidence for selecting that module; name the match.
 
 Compare existing instructions with the current core and modules semantically.
 Identify only material behavior that is uncovered, contradictory, or genuinely

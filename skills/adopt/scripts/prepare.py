@@ -113,6 +113,29 @@ def validated_inputs(raw_target):
     return target, preview, destination, draft, modules, values
 
 
+def local_skill_overlap(target, modules):
+    """Split the project's own skills by whether the preview installs them.
+
+    Returns the local skills the preview lacks, and the local skills a
+    selected module installs under the same name, paired with that module.
+    Only the outer root counts: a skill inside an inner repository is the
+    scan's concern.
+    """
+    root = target / ".claude" / "skills"
+    local = (
+        sorted(p.name for p in root.iterdir() if p.is_dir())
+        if root.is_dir()
+        else []
+    )
+    owners = {}
+    for module in modules:
+        for name in project_render.module_skill_files(KIT, module):
+            owners[Path(name).parts[0]] = module
+    missing = [name for name in local if name not in owners]
+    replaced = [(name, owners[name]) for name in local if name in owners]
+    return missing, replaced
+
+
 def prepare(raw_target):
     target, preview, destination, draft, modules, values = validated_inputs(
         raw_target
@@ -152,6 +175,15 @@ def prepare(raw_target):
     if rendered["installed_skills"]:
         reason += (
             "; installed skills: " + ", ".join(rendered["installed_skills"])
+        )
+    missing, replaced = local_skill_overlap(target, draft["modules"])
+    if missing:
+        reason += (
+            "; local skills missing from the preview: " + ", ".join(missing)
+        )
+    if replaced:
+        reason += "; local skills a module replaces: " + ", ".join(
+            f"{name} (module {module})" for name, module in replaced
         )
     next_step = "inspect the preview before reconciling existing project content"
     if changed_sources:

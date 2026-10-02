@@ -181,6 +181,30 @@ def scan_target(raw_target: str, max_files: int) -> ScanResult:
     return ScanResult(target=target, scopes=tuple(scopes), warnings=tuple(warnings))
 
 
+def skill_lines(result: ScanResult) -> list[str]:
+    """One line per `.claude/skills/<name>/` directory in any scope.
+
+    A skill inside an inner repository is marked, because the repository
+    layout keeps `.claude/` out of inner repositories.
+    """
+    lines = []
+    for scope in result.scopes:
+        root = scope.root / ".claude" / "skills"
+        if root.is_symlink() or not root.is_dir():
+            continue
+        for directory in sorted(root.iterdir()):
+            if directory.is_symlink() or not directory.is_dir():
+                continue
+            path = directory.relative_to(result.target).as_posix()
+            if not safe_display_path(path):
+                continue
+            line = f"- `{directory.name}` - `{path}/`"
+            if scope.root != result.target:
+                line += f" - inside inner repository `{scope.label}`"
+            lines.append(line)
+    return lines
+
+
 def render(result: ScanResult) -> str:
     lines = [f"Target: `{result.target}`", "", "## Git repositories", ""]
     repositories = [scope for scope in result.scopes if scope.kind == "repository"]
@@ -190,6 +214,10 @@ def render(result: ScanResult) -> str:
             lines.append(f"- `{scope.label}` - Git repository{parent}")
     else:
         lines.append("None found")
+
+    lines.extend(["", "## Skills", ""])
+    skills = skill_lines(result)
+    lines.extend(skills if skills else ["None found"])
 
     for scope in result.scopes:
         heading = "Repository" if scope.kind == "repository" else "Workspace"

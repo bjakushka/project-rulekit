@@ -47,7 +47,8 @@ Apply accepted decisions to the preview only. Keep unresolved items open, and
 record moves or deletions separately for later approval.
 
 When the owner decides that behavior belongs in Rulekit generally, edit the
-copied module under `.kit-preview/files/rules/`. Do not edit the active Rulekit
+copied module under `.kit-preview/files/rules/`, or its skill under
+`.kit-preview/files/.claude/skills/`. Do not edit the active Rulekit
 catalogue during adoption. The project's `.kit.json` keeps the source Rulekit
 commit, so a future sync can show this local module change and offer it back to
 Rulekit.
@@ -61,7 +62,12 @@ edit `reconciliation.json` directly:
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" state init
 ```
 
-While the state is `collecting`, start `rulekit:adopt-reconciliation-reader`.
+While the state is `collecting`, first register one item per local skill
+through `item add`: each name `prepare.py` reported as missing from the
+preview or replaced by a module, and each skill `scan.py` marked as inside an
+inner repository. The reader does not look at skills.
+
+Then start `rulekit:adopt-reconciliation-reader`.
 Give it only the resolved target, `.kit-preview/files/`, verified diagnostic
 findings, the exact `${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py`
 path, and a request to follow its own instructions. It registers every finding
@@ -131,6 +137,15 @@ the outcome, not the whole conversation.
 
 When the accepted outcome depends on an exact copy, entry count, or unchanged
 text, verify it with a deterministic comparison before completing the item.
+
+For a local skill, the choices are fixed:
+
+- missing from the preview: copy its directory into
+  `.kit-preview/files/.claude/skills/` unchanged, or leave it out
+- replaced by a module: keep the module's skill, or rename the local one and
+  copy it under the new name. Warn that the names collide; never merge them
+- inside an inner repository: copy it into the outer `.claude/skills/`, or
+  leave it out
 
 Continue with `item next`. When no open items remain, check whether the work
 revealed another material difference and append it if needed.
