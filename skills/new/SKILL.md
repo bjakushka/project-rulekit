@@ -104,8 +104,9 @@ Show the synthesized English context alone in a clearly separated project-brief
 block. Explain that it will be the main project description available to future
 assistants after this conversation is gone. Use `AskUserQuestion` to ask one
 confirmation question about the inferred decisions and whether the context
-describes the project correctly. Do not put any unresolved question in the
-same interaction.
+describes the project correctly. Write the summary and the project-brief block
+into the question text itself, so the user confirms with them in view. Do not
+put any unresolved question in the same interaction.
 
 If the user confirms, store the displayed model-written context and the other
 accepted answers through `answers.py`; do not expand, rewrite, or enrich the

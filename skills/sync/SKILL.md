@@ -59,8 +59,8 @@ The script reports only items that differ. Interpret its statuses as:
 - `diverged`: both changed and no longer match each other
 - `collision`: a skill new since baseline reuses a project-local skill's name
 
-If rendered core and every selected module are unchanged, report that no sync
-is needed and stop.
+If rendered core and every selected module are unchanged, run the visibility
+check described below, report that no sync is needed, and stop.
 If detection fails, report the refusal and stop. Do not repair `.kit.json` or
 substitute another baseline.
 
@@ -103,7 +103,7 @@ propose merging, and write nothing there before the owner chooses.
 
 A file the baseline and project have but the current kit lacks is a removal.
 Never delete it yourself: name each path for the owner to delete, wait for
-confirmation, then recheck.
+confirmation, then recheck. When a whole skill goes, name its directory.
 
 Project-specific behavior does not belong in shared Rulekit core or a module.
 When a project rule expresses a portable principle with local wording,
