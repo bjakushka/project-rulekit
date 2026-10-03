@@ -58,6 +58,12 @@
       "load": "always",
       "required": true
     },
+    "status": {
+      "description": "Status: where the project stands and what comes next",
+      "group": null,
+      "load": "always",
+      "required": true
+    },
     "type_coding": {
       "description": "Project type: coding",
       "group": "type",
