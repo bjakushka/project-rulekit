@@ -104,14 +104,16 @@ Request the first open item:
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/adopt/scripts/reconcile.py" --target "<resolved-target>" item next
 ```
 
-Read its cited evidence again. In chat, show only the small block needed for an
+Read its cited evidence again. In chat, explain only what is needed for an
 informed decision:
 
 - what the existing project does
 - what the clean preview does
 - viable choices and their consequences
 - the recommended choice
-- the exact minimal preview diff for that choice
+
+Show the exact minimal preview diff for that choice the way the owner's own
+instructions prescribe.
 
 Then call `AskUserQuestion`. When the choice changes file content, offer to
 accept, to reject, or to see the full diff first. Do not decide from textual

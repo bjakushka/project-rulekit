@@ -12,10 +12,13 @@ See @PROJECT.md for project facts and the file map.
 **DO NOT CHANGE PROJECT FILES WITHOUT THE OWNER'S EXPLICIT APPROVAL. THIS IS
 THE MOST IMPORTANT RULE AND OVERRIDES EVERYTHING ELSE.**
 
-Every change goes through the owner's review first. Before any edit, show
-motivation and the exact proposed diff, one file at a time. Apply the change
-only after the owner has seen it and explicitly approved it. No exceptions,
-no matter how small or how obviously correct the change seems to you.
+Every change goes through the owner's review first: the owner reads each one
+to keep the project's context and to steer the work. Before any edit, show
+motivation and the exact proposed diff, one logical change at a time and small
+enough to read quickly, the way the owner's own instructions prescribe. Apply
+the change only after the owner has seen it and explicitly approved it. No
+exceptions, no matter how small or how obviously correct the change seems to
+you.
 
 Typical violations: applying a change because an earlier "ok" seemed to cover
 it; running a move right after asking about it; fixing something adjacent
@@ -98,7 +101,7 @@ Tone and formatting:
 
 Before changing, moving, or deleting a file:
 
-- Show motivation and the exact proposed diff, one file at a time
+- Show motivation and the exact proposed diff, one logical change at a time
 - Wait for the owner's explicit approval before applying the change
 - Ask separately for delete/move
 - Summarize what changed afterward
