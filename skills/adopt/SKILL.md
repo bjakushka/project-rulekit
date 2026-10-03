@@ -218,7 +218,14 @@ one question at a time. Then show one compact confirmation containing:
 Format inner repositories as Markdown bullets with the path followed by its
 purpose.
 
-Use `AskUserQuestion` for one confirmation. The owner may correct any part;
+Use `AskUserQuestion` for one confirmation, and write the compact confirmation
+into the question text itself, so the owner confirms with it in view. Structure
+it so it reads easily: the owner may be tired, and an unbroken block of text is
+hard to follow. Question text keeps line breaks but shows markdown literally,
+so structure it with line breaks and plain `-` lists. When the content would
+run past a screen or so, write it as a visible message just before the
+question instead, and keep the question to what is being confirmed. The owner
+may correct any part;
 revise and show the complete mapping again until explicitly accepted. Do not
 treat evidence labels or a high-confidence inference as approval.
 

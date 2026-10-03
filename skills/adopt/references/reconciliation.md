@@ -113,8 +113,10 @@ informed decision:
 - the recommended choice
 - the exact minimal preview diff for that choice
 
-Then call `AskUserQuestion`. Do not decide from textual similarity or silently
-accept the recommendation. The owner's project knowledge governs the outcome.
+Then call `AskUserQuestion`. When the choice changes file content, offer to
+accept, to reject, or to see the full diff first. Do not decide from textual
+similarity or silently accept the recommendation. The owner's project
+knowledge governs the outcome.
 
 One item represents one independently decidable outcome, not necessarily one
 file. Never combine unrelated choices merely because they occur in the same

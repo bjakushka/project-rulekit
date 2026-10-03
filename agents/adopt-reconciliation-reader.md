@@ -25,7 +25,8 @@ Read the target's root instruction entry point, follow its explicit imports,
 then read its project-context and task-intake entry points. Read an additional
 instruction or structure file only when one of those files explicitly points
 to it. Do not inspect implementation content or files inside nested Git
-repositories.
+repositories. Only files inside the target are sources: instructions loaded
+into your own session are not the project's rules.
 
 In the preview, read `CLAUDE.md`, then read every generated `kit:imports` path.
 Also read `PROJECT.md` and generated intake files. A `Glob` result is not a

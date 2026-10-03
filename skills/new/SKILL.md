@@ -105,8 +105,13 @@ block. Explain that it will be the main project description available to future
 assistants after this conversation is gone. Use `AskUserQuestion` to ask one
 confirmation question about the inferred decisions and whether the context
 describes the project correctly. Write the summary and the project-brief block
-into the question text itself, so the user confirms with them in view. Do not
-put any unresolved question in the same interaction.
+into the question text itself, so the user confirms with them in view.
+Structure it so it reads easily: the user may be tired, and an unbroken block
+of text is hard to follow. Question text keeps line breaks but shows markdown
+literally, so structure it with line breaks and plain `-` lists. When the
+content would run past a screen or so, write it as a visible message just
+before the question instead, and keep the question to what is being confirmed.
+Do not put any unresolved question in the same interaction.
 
 If the user confirms, store the displayed model-written context and the other
 accepted answers through `answers.py`; do not expand, rewrite, or enrich the
@@ -201,6 +206,7 @@ or inspect the preview first. Write the preparation report into the question
 text itself, so the user decides with it in view: the resolved target, answers
 file path, preview path, exact selected modules and values, the skills the
 script reports as installed, concise project context, and inner repositories.
+Structure the report the same way, so it reads easily.
 State there that the generated files are ready for inspection inside
 `.kit-preview/files` but have not been applied to the project root.
 Put the apply option first and apply only when the user selects it. If the user
