@@ -5,6 +5,7 @@ description: >-
   progress, what can be taken next, and which external events are coming up.
   Use when the owner asks where things stand, what was done last, what to do
   next or what is coming up, or comes back to the project after a break.
+disable-model-invocation: false
 allowed-tools:
   - AskUserQuestion
   - 'Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/report.py *)'
@@ -14,6 +15,9 @@ allowed-tools:
 Tell the owner where the project stands, from `status.md` in the project root.
 This skill only reads. Updating the file is the `wrap-up` skill's job, and
 nothing here changes a file.
+
+The file's format is defined in `rules/status/INDEX.md`, which is loaded with
+the project instructions. Reread it if it is not in view.
 
 ## 1. Run the report
 
