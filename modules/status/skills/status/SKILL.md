@@ -35,7 +35,8 @@ If the script exits with an error, give the owner its `result`, `reason` and
 ## 2. Read the file
 
 Read `status.md` for the content the report does not carry: the last session,
-the work in progress, and the options in `Next`.
+the work in progress, and the options in `Next`. Read nothing else until the
+owner chooses to go deeper in step 4.
 
 ## 3. Tell the owner
 

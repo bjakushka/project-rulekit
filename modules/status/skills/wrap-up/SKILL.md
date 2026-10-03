@@ -48,8 +48,8 @@ Ask in one batch, before drafting:
 - whether anything is missing that this session cannot show: progress made
   elsewhere, new events, other options for what is next
 
-Skip the batch when there are no passed items and the session leaves nothing
-in doubt.
+Always ask the second question: the session cannot show what happened outside
+it. Leave out the first when the report lists no passed items.
 
 ## 4. Draft the update
 
