@@ -62,8 +62,10 @@ A participant ID names who is speaking, so it stays readable: `h-granger` or
 Every file opens with frontmatter containing:
 
 - `title` - what the conversation is
-- `context` - why it is kept and what a reader needs to trust it
-- `description` - what happened in the conversation
+- `context` - optional, why it is kept and what a reader needs to trust it.
+  Not a list of known facts
+- `description` - what the conversation is about, as long as that takes.
+  Not a retelling of what was asked and answered
 - `participants` - a list of entries with a stable `id`, a `name`, and the
   contact details that are known
 - `related` - optional, a flat list of slugs of other conversations
